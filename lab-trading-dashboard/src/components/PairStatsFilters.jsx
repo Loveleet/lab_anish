@@ -38,8 +38,18 @@ const PairStatsFilters = ({
   trades,
   darkMode,
 }) => {
-  // Action list from trades
-  const allActions = Array.from(new Set(trades.map(t => t.Action).filter(Boolean)));
+  // Action list from trades - check multiple possible field names
+  const allActions = Array.from(new Set(
+    trades.flatMap(t => [
+      t.Action, 
+      t.action, 
+      t.SignalType, 
+      t.signal_type
+    ].filter(Boolean))
+  ));
+  
+  console.log('🔍 [PairStatsFilters] Available actions:', allActions);
+  console.log('🔍 [PairStatsFilters] Sample trade:', trades[0]);
 
   return (
     <div

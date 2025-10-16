@@ -1,20 +1,22 @@
 const express = require("express");
 const cors = require("cors");
-const sql = require("mssql");
+const { Pool } = require("pg");
 const axios = require('axios');
 
 const app = express();
 const fs = require("fs");
 let currentLogPath = "D:/Projects/blockchainProject/pythonProject/Binance/Loveleet_Anish_Bot/LAB-New-Logic/hedge_logs";
 const PORT = process.env.PORT || 10000;
+const ENABLE_SELF_PING = String(process.env.ENABLE_SELF_PING || '').toLowerCase() === 'true';
+const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'true';
 
 // ✅ Allowed Frontend Origins (Local + Vercel + Render)
 const allowedOrigins = [
   "http://localhost:5173", // Local Vite
   "http://localhost:5174", // Alternate local Vite
-  "https://lab-code-q0ij.onrender.com", // Your backend (if you ever serve frontend from here)
+  "https://lab-code-1r1r.onrender.com", // Your backend (if you ever serve frontend from here)
   "https://lab-code-4kbs.vercel.app", // Vercel frontend
-  "https://lab-code-1.onrender.com", // Alternate Render frontend
+  "https://lab-code-1r1r.onrender.com", // Alternate Render frontend
   "https://lab-code-4kbs-git-lab-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   "https://lab-code-4kbs-q77fv3aml-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   // Add any other frontend URLs you use here
@@ -23,11 +25,21 @@ const allowedOrigins = [
 // ✅ Proper CORS Handling
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
+    try {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Allow Vercel preview domains for this project
+      // Example: https://lab-code-4kbs-xxxxxxxxx-loveleets-projects-ef26b22c.vercel.app
+      const u = new URL(origin);
+      const host = u.hostname || '';
+      if (host.endsWith('.vercel.app') && host.includes('lab-code-4kbs')) {
+        return callback(null, true);
+      }
       console.error("❌ CORS blocked origin:", origin);
-      callback(new Error("CORS not allowed for this origin"));
+      return callback(new Error("CORS not allowed for this origin"));
+    } catch (e) {
+      console.error("❌ CORS origin parse error:", e.message);
+      return callback(new Error("CORS origin parse error"));
     }
   },
   credentials: true,
@@ -51,29 +63,59 @@ app.use("/logs", (req, res, next) => {
   express.static(currentLogPath)(req, res, next);
 });
 
-// ✅ Database Configuration
+// ✅ Database Configuration - Force cloud database (ignore env vars temporarily)
 const dbConfig = {
   user: "lab",
   password: "IndiaNepal1-",
-  server: "20.40.58.121",
-  port: 1433,
-  database: "olab",
-  options: {
-    encrypt: false,
-    trustServerCertificate: true,
-  },
+  host: "150.241.244.130",
+  port: 5432,
+  database: "labdb2",
+  ssl: { rejectUnauthorized: false }, // Force SSL for cloud PostgreSQL
+  connectionTimeoutMillis: 30000,
+  idleTimeoutMillis: 30000,
 };
 
-// ✅ Retry SQL Connection Until Successful
+// ✅ Retry PostgreSQL Connection Until Successful
 async function connectWithRetry() {
-  try {
-    const pool = await new sql.ConnectionPool(dbConfig).connect();
-    console.log("✅ Connected to SQL Server");
-    return pool;
-  } catch (err) {
-    console.error("❌ SQL Connection Failed. Retrying in 5 seconds...", err.code || err.message);
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-    return connectWithRetry();
+  const configs = [
+    // Try with SSL first (production setting)
+    { ...dbConfig, ssl: { rejectUnauthorized: false } },
+    // Try with require SSL
+    { ...dbConfig, ssl: { rejectUnauthorized: false, sslmode: 'require' } },
+    // Try without SSL as fallback
+    { ...dbConfig, ssl: false }
+  ];
+
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    try {
+      console.log(`🔧 Attempt ${i + 1}: PostgreSQL connection to:`, `${config.host}:${config.port}/${config.database}`);
+      console.log("🔧 Connection config:", {
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        ssl: !!config.ssl,
+        sslConfig: config.ssl
+      });
+      
+      const pool = new Pool(config);
+      await pool.query('SELECT NOW()');
+      console.log(`✅ Connected to PostgreSQL successfully with config ${i + 1}`);
+      return pool;
+    } catch (err) {
+      console.error(`❌ PostgreSQL Connection Failed (attempt ${i + 1}):`);
+      console.error("   Error Code:", err.code);
+      console.error("   Error Message:", err.message);
+      
+      if (i === configs.length - 1) {
+        console.error("   All connection attempts failed. Retrying in 5 seconds...");
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return connectWithRetry();
+      } else {
+        console.log(`   Trying next configuration...`);
+      }
+    }
   }
 }
 
@@ -85,13 +127,34 @@ app.get("/", (req, res) => {
 });
 
 // ✅ API: Fetch All Trades
-app.get("/api/trades", async (req, res) => {
+// ✅ API: Fetch SuperTrend Signals
+app.get("/api/supertrend", async (req, res) => {
   try {
     const pool = await poolPromise;
     if (!pool) throw new Error("Database not connected");
-    const result = await pool.request().query("SELECT * FROM AllTradeRecords;");
-    res.json({ trades: result.recordset });
+    const result = await pool.query(
+      'SELECT source, trend, timestamp FROM supertrend ORDER BY timestamp DESC LIMIT 10;'
+    );
+    console.log("[SuperTrend API] Rows returned:", result.rows);
+    res.json({ supertrend: result.rows });
   } catch (error) {
+    console.error("❌ [SuperTrend] Error:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch SuperTrend data" });
+  }
+});
+app.get("/api/trades", async (req, res) => {
+  try {
+    if (VERBOSE_LOG) console.log("🔍 [Trades] Request received");
+    const pool = await poolPromise;
+    if (!pool) throw new Error("Database not connected");
+    const result = await pool.query("SELECT * FROM alltraderecords;");
+    if (VERBOSE_LOG) {
+      console.log("🔍 [Trades] Fetched", result.rows.length, "trades");
+      console.log("🔍 [Trades] Sample trade:", result.rows[0]);
+    }
+    res.json({ trades: result.rows });
+  } catch (error) {
+    console.error("❌ [Trades] Error:", error);
     res.status(500).json({ error: error.message || "Failed to fetch trades" });
   }
 });
@@ -101,18 +164,37 @@ app.get("/api/machines", async (req, res) => {
   try {
     const pool = await poolPromise;
     if (!pool) throw new Error("Database not connected");
-    const result = await pool.request().query("SELECT MachineId, Active FROM Machines;");
-    res.json({ machines: result.recordset });
+    const result = await pool.query("SELECT machineid, active FROM machines;");
+    res.json({ machines: result.rows });
   } catch (error) {
     console.error("❌ Query Error (/api/machines):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch machines" });
   }
 });
 
+// ✅ API: Fetch EMA Trend Data from pairstatus
+app.get("/api/pairstatus", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    if (!pool) throw new Error("Database not connected");
+    const result = await pool.query(`
+      SELECT overall_ema_trend_1m, overall_ema_trend_percentage_1m,
+             overall_ema_trend_5m, overall_ema_trend_percentage_5m,
+             overall_ema_trend_15m, overall_ema_trend_percentage_15m
+      FROM pairstatus
+      LIMIT 1;
+    `);
+    res.json(result.rows[0] || {});
+  } catch (error) {
+    console.error("❌ Query Error (/api/pairstatus):", error.message);
+    res.status(500).json({ error: error.message || "Failed to fetch pairstatus" });
+  }
+});
+
 // ✅ Binance Proxy Endpoint
 const LOCAL_PROXY =
   process.env.NODE_ENV === 'production'
-    ? 'https://lab-code-1.onrender.com/api/klines'
+    ? 'https://lab-code-1r1r.onrender.com/api/klines'
     : 'http://localhost:10000/api/klines';
 
 app.get('/api/klines', async (req, res) => {
@@ -129,13 +211,14 @@ app.get('/api/klines', async (req, res) => {
 // ✅ API: Fetch Signal Processing Logs with Pagination and Filtering
 app.get("/api/SignalProcessingLogs", async (req, res) => {
   try {
+    console.log("🔍 [SignalProcessingLogs] Request received:", req.query);
     const pool = await poolPromise;
     if (!pool) throw new Error("Database not connected");
     
     // Parse query parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
+    const limit = req.query.limit === 'all' ? 'all' : (parseInt(req.query.limit) || 50);
+    const offset = (page - 1) * (limit === 'all' ? 0 : limit);
     
     // Build WHERE clause for filters
     let whereConditions = [];
@@ -144,42 +227,54 @@ app.get("/api/SignalProcessingLogs", async (req, res) => {
     
     // Symbol filter
     if (req.query.symbol) {
-      whereConditions.push(`symbol LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.symbol}%` });
+      whereConditions.push(`symbol LIKE $${paramIndex}`);
+      params.push(`%${req.query.symbol}%`);
       paramIndex++;
     }
     // Signal type filter
     if (req.query.signalType) {
-      whereConditions.push(`signal_type LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.signalType}%` });
+      whereConditions.push(`signal_type LIKE $${paramIndex}`);
+      params.push(`%${req.query.signalType}%`);
       paramIndex++;
     }
     // Machine filter
     if (req.query.machineId) {
-      whereConditions.push(`machine_id = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.machineId });
+      whereConditions.push(`machine_id = $${paramIndex}`);
+      params.push(req.query.machineId);
       paramIndex++;
     }
     // Date range filter
     if (req.query.fromDate) {
-      whereConditions.push(`Candle_Time >= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.fromDate });
+      whereConditions.push(`candle_time >= $${paramIndex}`);
+      params.push(req.query.fromDate);
       paramIndex++;
     }
     if (req.query.toDate) {
-      whereConditions.push(`Candle_Time <= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.toDate });
+      whereConditions.push(`candle_time <= $${paramIndex}`);
+      params.push(req.query.toDate);
       paramIndex++;
     }
     // RSI range filter (from json_data, so not filterable in SQL directly)
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // --- Sorting logic ---
+    const allowedSortKeys = [
+      'candle_time', 'symbol', 'interval', 'signal_type', 'signal_source', 'candle_pattern', 'price',
+      'squeeze_status', 'active_squeeze', 'processing_time_ms', 'machine_id', 'timestamp', 'created_at', 'unique_id'
+    ];
+    let sortKey = req.query.sortKey;
+    let sortDirection = req.query.sortDirection && req.query.sortDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    if (!allowedSortKeys.includes(sortKey)) {
+      sortKey = 'candle_time';
+    }
+    const orderByClause = `ORDER BY ${sortKey} ${sortDirection}`;
     
     // Build the query
-    const countQuery = `SELECT COUNT(*) as total FROM SignalProcessingLogs ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM signalprocessinglogs ${whereClause}`;
     const dataQuery = `
       SELECT 
         id,
-        Candle_Time,
+        candle_time,
         symbol,
         interval,
         signal_type,
@@ -192,26 +287,29 @@ app.get("/api/SignalProcessingLogs", async (req, res) => {
         machine_id,
         timestamp,
         json_data,
-        created_at
-      FROM SignalProcessingLogs 
+        created_at,
+        unique_id
+      FROM signalprocessinglogs 
       ${whereClause}
-      ORDER BY Candle_Time DESC
-      ${req.query.limit === 'all' ? '' : `OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`}
+      ${orderByClause}
+      ${limit === 'all' ? '' : `LIMIT ${limit} OFFSET ${offset}`}
     `;
     
     // Execute queries
-    const request = pool.request();
-    params.forEach(param => {
-      request.input(param.name, param.value);
-    });
+    console.log("🔍 [SignalProcessingLogs] Count query:", countQuery);
+    console.log("🔍 [SignalProcessingLogs] Data query:", dataQuery);
+    console.log("🔍 [SignalProcessingLogs] Parameters:", params);
     
     const [countResult, dataResult] = await Promise.all([
-      request.query(countQuery),
-      request.query(dataQuery)
+      pool.query(countQuery, params),
+      pool.query(dataQuery, params)
     ]);
     
-    const total = countResult.recordset[0].total;
-    const logs = dataResult.recordset;
+    const total = parseInt(countResult.rows[0].total);
+    const logs = dataResult.rows;
+    
+    console.log("🔍 [SignalProcessingLogs] Total records:", total);
+    console.log("🔍 [SignalProcessingLogs] Fetched logs:", logs.length);
     
     // Parse JSON data for each log and extract extra fields
     const processedLogs = logs.map(log => {
@@ -232,20 +330,22 @@ app.get("/api/SignalProcessingLogs", async (req, res) => {
       return { ...log, ...extra };
     });
     
+    console.log("🔍 [SignalProcessingLogs] Sending response with", processedLogs.length, "logs");
     res.json({
       logs: processedLogs,
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1
+        totalPages: limit === 'all' ? 1 : Math.ceil(total / limit),
+        hasNext: limit === 'all' ? false : page < Math.ceil(total / limit),
+        hasPrev: limit === 'all' ? false : page > 1
       }
     });
     
   } catch (error) {
-    console.error("❌ Query Error (/api/SignalProcessingLogs):", error.message);
+    console.error("❌ [SignalProcessingLogs] Error:", error);
+    console.error("❌ [SignalProcessingLogs] Error stack:", error.stack);
     res.status(500).json({ error: error.message || "Failed to fetch signal processing logs" });
   }
 });
@@ -258,8 +358,8 @@ app.get("/api/bot-event-logs", async (req, res) => {
     
     // Parse query parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
+    const limit = req.query.limit === 'all' ? 'all' : (parseInt(req.query.limit) || 50);
+    const offset = (page - 1) * (limit === 'all' ? 0 : limit);
     
     // Build WHERE clause for filters
     let whereConditions = [];
@@ -268,38 +368,49 @@ app.get("/api/bot-event-logs", async (req, res) => {
     
     // UID filter (exact match)
     if (req.query.uid) {
-      whereConditions.push(`UID = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.uid });
+      whereConditions.push(`uid = $${paramIndex}`);
+      params.push(req.query.uid);
       paramIndex++;
     }
     
     // Source filter
     if (req.query.source) {
-      whereConditions.push(`source LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.source}%` });
+      whereConditions.push(`source LIKE $${paramIndex}`);
+      params.push(`%${req.query.source}%`);
       paramIndex++;
     }
     
     // Machine filter
     if (req.query.machineId) {
-      whereConditions.push(`machine_id = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.machineId });
+      whereConditions.push(`machine_id = $${paramIndex}`);
+      params.push(req.query.machineId);
       paramIndex++;
     }
     
     // Date range filter
     if (req.query.fromDate) {
-      whereConditions.push(`timestamp >= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.fromDate });
+      whereConditions.push(`timestamp >= $${paramIndex}`);
+      params.push(req.query.fromDate);
       paramIndex++;
     }
     if (req.query.toDate) {
-      whereConditions.push(`timestamp <= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.toDate });
+      whereConditions.push(`timestamp <= $${paramIndex}`);
+      params.push(req.query.toDate);
       paramIndex++;
     }
     
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    // --- Sorting logic ---
+    const allowedSortKeys = [
+      'id', 'uid', 'source', 'pl_after_comm', 'plain_message', 'timestamp', 'machine_id'
+    ];
+    let sortKey = req.query.sortKey;
+    let sortDirection = req.query.sortDirection && req.query.sortDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    if (!allowedSortKeys.includes(sortKey)) {
+      sortKey = 'timestamp';
+    }
+    const orderByClause = `ORDER BY ${sortKey} ${sortDirection}`;
     
     // Build the query
     const countQuery = `SELECT COUNT(*) as total FROM bot_event_log ${whereClause}`;
@@ -308,30 +419,25 @@ app.get("/api/bot-event-logs", async (req, res) => {
         id,
         uid,
         source,
-        Pl_after_comm,
+        pl_after_comm,
         plain_message,
         json_message,
         timestamp,
         machine_id
       FROM bot_event_log 
       ${whereClause}
-      ORDER BY timestamp DESC
-      ${req.query.limit === 'all' ? '' : `OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`}
+      ${orderByClause}
+      ${limit === 'all' ? '' : `LIMIT ${limit} OFFSET ${offset}`}
     `;
     
     // Execute queries
-    const request = pool.request();
-    params.forEach(param => {
-      request.input(param.name, param.value);
-    });
-    
     const [countResult, dataResult] = await Promise.all([
-      request.query(countQuery),
-      request.query(dataQuery)
+      pool.query(countQuery, params),
+      pool.query(dataQuery, params)
     ]);
     
-    const total = countResult.recordset[0].total;
-    const logs = dataResult.recordset;
+    const total = parseInt(countResult.rows[0].total);
+    const logs = dataResult.rows;
     
     // Parse JSON message for each log if needed
     const processedLogs = logs.map(log => {
@@ -355,14 +461,14 @@ app.get("/api/bot-event-logs", async (req, res) => {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1
+        totalPages: limit === 'all' ? 1 : Math.ceil(total / (limit === 'all' ? total : limit)),
+        hasNext: limit === 'all' ? false : page < Math.ceil(total / (limit === 'all' ? total : limit)),
+        hasPrev: limit === 'all' ? false : page > 1
       }
     });
     
   } catch (error) {
-    console.error("❌ Query Error (/api/bot-event-logs):", error.message);
+    console.error("\u274c Query Error (/api/bot-event-logs):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch bot event logs" });
   }
 });
@@ -378,28 +484,28 @@ app.get("/api/SignalProcessingLogs/summary", async (req, res) => {
     let params = [];
     let paramIndex = 1;
     if (req.query.symbol) {
-      whereConditions.push(`symbol LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.symbol}%` });
+      whereConditions.push(`symbol LIKE $${paramIndex}`);
+      params.push(`%${req.query.symbol}%`);
       paramIndex++;
     }
     if (req.query.signalType) {
-      whereConditions.push(`signal_type LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.signalType}%` });
+      whereConditions.push(`signal_type LIKE $${paramIndex}`);
+      params.push(`%${req.query.signalType}%`);
       paramIndex++;
     }
     if (req.query.machineId) {
-      whereConditions.push(`machine_id = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.machineId });
+      whereConditions.push(`machine_id = $${paramIndex}`);
+      params.push(req.query.machineId);
       paramIndex++;
     }
     if (req.query.fromDate) {
-      whereConditions.push(`Candle_Time >= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.fromDate });
+      whereConditions.push(`candle_time >= $${paramIndex}`);
+      params.push(req.query.fromDate);
       paramIndex++;
     }
     if (req.query.toDate) {
-      whereConditions.push(`Candle_Time <= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.toDate });
+      whereConditions.push(`candle_time <= $${paramIndex}`);
+      params.push(req.query.toDate);
       paramIndex++;
     }
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -409,15 +515,11 @@ app.get("/api/SignalProcessingLogs/summary", async (req, res) => {
       SELECT 
         signal_type,
         json_data
-      FROM SignalProcessingLogs 
+      FROM signalprocessinglogs 
       ${whereClause}
     `;
-    const request = pool.request();
-    params.forEach(param => {
-      request.input(param.name, param.value);
-    });
-    const result = await request.query(summaryQuery);
-    const logs = result.recordset;
+    const result = await pool.query(summaryQuery, params);
+    const logs = result.rows;
     let totalLogs = logs.length;
     let buyCount = 0;
     let sellCount = 0;
@@ -471,28 +573,28 @@ app.get("/api/bot-event-logs/summary", async (req, res) => {
     let paramIndex = 1;
     
     if (req.query.uid) {
-      whereConditions.push(`UID = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.uid });
+      whereConditions.push(`uid = $${paramIndex}`);
+      params.push(req.query.uid);
       paramIndex++;
     }
     if (req.query.source) {
-      whereConditions.push(`source LIKE @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: `%${req.query.source}%` });
+      whereConditions.push(`source LIKE $${paramIndex}`);
+      params.push(`%${req.query.source}%`);
       paramIndex++;
     }
     if (req.query.machineId) {
-      whereConditions.push(`machine_id = @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.machineId });
+      whereConditions.push(`machine_id = $${paramIndex}`);
+      params.push(req.query.machineId);
       paramIndex++;
     }
     if (req.query.fromDate) {
-      whereConditions.push(`timestamp >= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.fromDate });
+      whereConditions.push(`timestamp >= $${paramIndex}`);
+      params.push(req.query.fromDate);
       paramIndex++;
     }
     if (req.query.toDate) {
-      whereConditions.push(`timestamp <= @p${paramIndex}`);
-      params.push({ name: `p${paramIndex}`, value: req.query.toDate });
+      whereConditions.push(`timestamp <= $${paramIndex}`);
+      params.push(req.query.toDate);
       paramIndex++;
     }
     
@@ -504,23 +606,18 @@ app.get("/api/bot-event-logs/summary", async (req, res) => {
         COUNT(*) as totalLogs,
         COUNT(DISTINCT machine_id) as uniqueMachines,
         COUNT(DISTINCT source) as uniqueSources,
-        SUM(CASE WHEN Pl_after_comm > 0 THEN 1 ELSE 0 END) as positivePLCount,
-        SUM(CASE WHEN Pl_after_comm < 0 THEN 1 ELSE 0 END) as negativePLCount,
-        SUM(CASE WHEN Pl_after_comm = 0 THEN 1 ELSE 0 END) as zeroPLCount,
-        AVG(Pl_after_comm) as avgPL,
+        SUM(CASE WHEN pl_after_comm > 0 THEN 1 ELSE 0 END) as positivePLCount,
+        SUM(CASE WHEN pl_after_comm < 0 THEN 1 ELSE 0 END) as negativePLCount,
+        SUM(CASE WHEN pl_after_comm = 0 THEN 1 ELSE 0 END) as zeroPLCount,
+        AVG(pl_after_comm) as avgPL,
         MIN(timestamp) as earliestLog,
         MAX(timestamp) as latestLog
       FROM bot_event_log 
       ${whereClause}
     `;
     
-    const request = pool.request();
-    params.forEach(param => {
-      request.input(param.name, param.value);
-    });
-    
-    const result = await request.query(summaryQuery);
-    const summary = result.recordset[0];
+    const result = await pool.query(summaryQuery, params);
+    const summary = result.rows[0];
     
     res.json({
       summary: {
@@ -548,31 +645,26 @@ app.get("/api/trades/filtered", async (req, res) => {
     if (!pool) throw new Error("Database not connected");
     
     const { pair, limit = 1000 } = req.query;
-    let query = "SELECT * FROM AllTradeRecords";
+    let query = "SELECT * FROM alltraderecords";
     let params = [];
     let paramIndex = 1;
     
     if (pair) {
-      query += ` WHERE Pair = @p${paramIndex}`;
-      params.push({ name: `p${paramIndex}`, value: pair });
+      query += ` WHERE pair = $${paramIndex}`;
+      params.push(pair);
       paramIndex++;
     }
     
     query += " ORDER BY created_at DESC";
     
     if (limit && limit !== 'all') {
-      query += ` OFFSET 0 ROWS FETCH NEXT ${parseInt(limit)} ROWS ONLY`;
+      query += ` LIMIT ${parseInt(limit)}`;
     }
     
-    const request = pool.request();
-    params.forEach(param => {
-      request.input(param.name, param.value);
-    });
+    const result = await pool.query(query, params);
+    console.log(`[Server] Fetched ${result.rows.length} trades for pair: ${pair || 'all'}`);
     
-    const result = await request.query(query);
-    console.log(`[Server] Fetched ${result.recordset.length} trades for pair: ${pair || 'all'}`);
-    
-    res.json({ trades: result.recordset });
+    res.json({ trades: result.rows });
   } catch (error) {
     console.error("❌ Query Error (/api/trades/filtered):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch filtered trades" });
@@ -585,50 +677,61 @@ app.get("/api/SignalProcessingLogsWithUniqueId", async (req, res) => {
     const pool = await poolPromise;
     if (!pool) throw new Error("Database not connected");
 
-    let { symbols, page = 1, limit = 100 } = req.query;
+    let { symbols, page = 1, limit = 100, sortKey, sortDirection = 'ASC' } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
     if (!symbols) return res.status(400).json({ error: "Missing symbols param" });
     const symbolList = symbols.split(",").map(s => s.trim()).filter(Boolean);
     if (!symbolList.length) return res.status(400).json({ error: "No symbols provided" });
 
-    // Build WHERE clause for symbols and Unique_id (SQL trims whitespace)
-    const symbolPlaceholders = symbolList.map((_, i) => `@symbol${i}`).join(",");
-    const whereClause = `symbol IN (${symbolList.map((_, i) => `@symbol${i}`).join(",")}) AND Unique_id IS NOT NULL AND LTRIM(RTRIM(Unique_id)) <> ''`;
+    // Define allowed sort keys to prevent SQL injection
+    const allowedSortKeys = [
+      'candle_time', 'symbol', 'interval', 'signal_type', 'signal_source', 
+      'candle_pattern', 'price', 'squeeze_status', 'active_squeeze', 
+      'machine_id', 'timestamp', 'processing_time_ms', 'created_at', 'unique_id'
+    ];
 
-    // Get total count for pagination
-    const countQuery = `SELECT COUNT(*) as total FROM SignalProcessingLogs WHERE ${whereClause}`;
-    const countRequest = pool.request();
-    symbolList.forEach((sym, i) => countRequest.input(`symbol${i}`, sym));
-    // Debug log for count query
-    console.log('[API DEBUG] Count Query:', countQuery);
-    console.log('[API DEBUG] Count Params:', symbolList);
-    const countResult = await countRequest.query(countQuery);
-    const total = countResult.recordset[0]?.total || 0;
-    const totalPages = Math.ceil(total / limit);
+    // Build WHERE clause for symbols and Unique_id (PostgreSQL trims whitespace)
+    const symbolPlaceholders = symbolList.map((_, i) => `$${i + 1}`).join(",");
+    const whereClause = `symbol IN (${symbolPlaceholders}) AND unique_id IS NOT NULL AND TRIM(unique_id) <> ''`;
+
+    // Build ORDER BY clause
+    let orderByClause = 'ORDER BY created_at DESC';
+    if (sortKey && allowedSortKeys.includes(sortKey)) {
+      orderByClause = `ORDER BY ${sortKey} ${sortDirection === 'ASC' ? 'ASC' : 'DESC'}`;
+    }
+
+    // Get total count for pagination (primary query)
+    const countQuery = `SELECT COUNT(*) as total FROM signalprocessinglogs WHERE ${whereClause}`;
+    const countResult = await pool.query(countQuery, symbolList);
+    let total = parseInt(countResult.rows[0]?.total) || 0;
+    let totalPages = Math.ceil(total / limit);
     const offset = (page - 1) * limit;
 
-    // Fetch paginated logs
-    const logsQuery = `SELECT * FROM SignalProcessingLogs WHERE ${whereClause} ORDER BY created_at DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-    const logsRequest = pool.request();
-    symbolList.forEach((sym, i) => logsRequest.input(`symbol${i}`, sym));
-    logsRequest.input("offset", offset);
-    logsRequest.input("limit", limit);
-    // Debug log for logs query
-    console.log('[API DEBUG] Logs Query:', logsQuery);
-    console.log('[API DEBUG] Logs Params:', symbolList, { offset, limit });
-    const logsResult = await logsRequest.query(logsQuery);
+    // Fetch paginated logs (primary query)
+    const logsQuery = `SELECT * FROM signalprocessinglogs WHERE ${whereClause} ${orderByClause} LIMIT $${symbolList.length + 1} OFFSET $${symbolList.length + 2}`;
+    const logsParams = [...symbolList, limit, offset];
+    const logsResult = await pool.query(logsQuery, logsParams);
 
-    // Debug: log the first 10 Unique_id values from the raw result
-    console.log('Raw Unique_id values:', logsResult.recordset.slice(0, 10).map((log, i) => `[${i}] '${log.Unique_id}'`));
-
-    // Stronger filter: Unique_id must be a string, trimmed, not empty, not just whitespace or non-breaking spaces
-    const filteredLogs = logsResult.recordset.filter(
-      log => typeof log.Unique_id === 'string' && log.Unique_id.replace(/\s|\u00A0/g, '').length > 0
+    let filteredLogs = logsResult.rows.filter(
+      log => typeof log.unique_id === 'string' && log.unique_id.replace(/\s|\u00A0/g, '').length > 0
     );
 
-    // Debug: log the first 10 Unique_id values after filtering
-    console.log('Filtered Unique_id values:', filteredLogs.slice(0, 10).map((log, i) => `[${i}] '${log.Unique_id}'`));
+    // If no results, run fallback query (BUY/SELL signal_type)
+    let usedFallback = false;
+    if (filteredLogs.length === 0) {
+      usedFallback = true;
+      // Fallback count
+      const fallbackCountQuery = `SELECT COUNT(*) as total FROM signalprocessinglogs WHERE symbol IN (${symbolPlaceholders}) AND (signal_type = 'BUY' OR signal_type = 'SELL')`;
+      const fallbackCountResult = await pool.query(fallbackCountQuery, symbolList);
+      total = parseInt(fallbackCountResult.rows[0]?.total) || 0;
+      totalPages = Math.ceil(total / limit);
+      // Fallback logs
+      const fallbackQuery = `SELECT * FROM signalprocessinglogs WHERE symbol IN (${symbolPlaceholders}) AND (signal_type = 'BUY' OR signal_type = 'SELL') ${orderByClause} LIMIT $${symbolList.length + 1} OFFSET $${symbolList.length + 2}`;
+      const fallbackParams = [...symbolList, limit, offset];
+      const fallbackResult = await pool.query(fallbackQuery, fallbackParams);
+      filteredLogs = fallbackResult.rows;
+    }
 
     res.json({
       logs: filteredLogs,
@@ -636,7 +739,8 @@ app.get("/api/SignalProcessingLogsWithUniqueId", async (req, res) => {
         total,
         totalPages,
         page,
-        limit
+        limit,
+        usedFallback
       }
     });
   } catch (error) {
@@ -655,13 +759,11 @@ app.get("/api/SignalProcessingLogsByUIDs", async (req, res) => {
     const uidList = uids.split(",").map(u => u.trim()).filter(Boolean);
     if (!uidList.length) return res.status(400).json({ error: "No UIDs provided" });
 
-    const uidPlaceholders = uidList.map((_, i) => `@uid${i}`).join(",");
-    const query = `SELECT * FROM SignalProcessingLogs WHERE Unique_id IN (${uidPlaceholders})`;
-    const request = pool.request();
-    uidList.forEach((uid, i) => request.input(`uid${i}`, uid));
-    const result = await request.query(query);
+    const uidPlaceholders = uidList.map((_, i) => `$${i + 1}`).join(",");
+    const query = `SELECT * FROM signalprocessinglogs WHERE unique_id IN (${uidPlaceholders})`;
+    const result = await pool.query(query, uidList);
 
-    res.json({ logs: result.recordset });
+    res.json({ logs: result.rows });
   } catch (error) {
     console.error("❌ Query Error (/api/SignalProcessingLogsByUIDs):", error);
     res.status(500).json({ error: error.message || "Failed to fetch logs by UIDs" });
@@ -674,12 +776,13 @@ app.listen(PORT, () => {
 });
 const http = require("https");
 
-// ✅ Self-Ping to Prevent Render Sleep (every 14 minutes)
-setInterval(() => {
-  
-  http.get("https://lab-code-1.onrender.com/api/machines", (res) => {
-    console.log(`📡 Self-ping status: ${res.statusCode}`);
-  }).on("error", (err) => {
-    console.error("❌ Self-ping failed:", err.message);
-  });
-}, 14 * 60 * 1000); // 14 minutes
+// Self-Ping to Prevent Render Sleep (every 14 minutes) — gated by env
+if (ENABLE_SELF_PING) {
+  setInterval(() => {
+    http.get("https://lab-code-1r1r.onrender.com/api/machines", (res) => {
+      if (VERBOSE_LOG) console.log(`📡 Self-ping status: ${res.statusCode}`);
+    }).on("error", (err) => {
+      console.error("❌ Self-ping failed:", err.message);
+    });
+  }, 14 * 60 * 1000); // 14 minutes
+}

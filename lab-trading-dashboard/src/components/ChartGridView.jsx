@@ -155,9 +155,9 @@ const ChartGridView = ({
                 <div id={`tv_chart_${symbol}`} style={{ width: '100%', height: height }} />
                 {/* Trade Info */}
                 <div className="mt-2 text-xs text-gray-700 w-full">
-                  <div>PL: <b>{trade.PL ?? 'N/A'}</b></div>
-                  <div>Buy: <b>{trade.Buy_Price ?? 'N/A'}</b> | Sell: <b>{trade.Sell_Price ?? 'N/A'}</b></div>
-                  <div>Stop: <b>{trade.Stop_Price ?? 'N/A'}</b> | Save: <b>{trade.Save_Price ?? 'N/A'}</b></div>
+                          <div>PL: <b>{trade.pl_after_comm ?? 'N/A'}</b></div>
+        <div>Buy: <b>{trade.buy_price ?? 'N/A'}</b> | Sell: <b>{trade.sell_price ?? 'N/A'}</b></div>
+        <div>Stop: <b>{trade.stop_price ?? 'N/A'}</b> | Save: <b>{trade.save_price ?? 'N/A'}</b></div>
                 </div>
               </div>
             );

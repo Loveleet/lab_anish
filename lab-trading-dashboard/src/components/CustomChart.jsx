@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const LOCAL_PROXY =
   process.env.NODE_ENV === 'production'
-    ? 'https://lab-code-1.onrender.com/api/klines'
+    ? 'https://lab-code-5v36.onrender.com/api/klines'
     : 'http://localhost:10000/api/klines';
 
 function toUnix(ts) {

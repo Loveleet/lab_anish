@@ -9,6 +9,28 @@ const intervalMap = {
   "4h": "240",
   "1d": "D"
 };
+
+// Helper functions for consistent data parsing
+const parseHedge = (hedgeValue) => {
+  if (hedgeValue === true || hedgeValue === "true" || hedgeValue === 1 || hedgeValue === "1") return true;
+  if (hedgeValue === false || hedgeValue === "false" || hedgeValue === 0 || hedgeValue === "0" || 
+      hedgeValue === null || hedgeValue === undefined) return false;
+  if (typeof hedgeValue === 'string') {
+    const numValue = parseFloat(hedgeValue);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
+
+const parseBoolean = (value) => {
+  if (value === true || value === "true" || value === 1 || value === "1") return true;
+  if (typeof value === 'string') {
+    const numValue = parseFloat(value);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
+
 // ReportList.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 
@@ -25,57 +47,68 @@ const safeFixed = (val, digits = 2, prefix = "") => {
 
 const formatTradeData = (trade, index) => ({
   "S No": index + 1,
-  "M.Id": trade.MachineId || "N/A",
-  Unique_ID: trade.Unique_id || "N/A",
-  "Candle_🕒": trade.Candel_time,
-  "Fetcher_🕒": trade.Fetcher_Trade_time,
-  "Operator_🕒": trade.Operator_Trade_time,
-  Pair: trade.Pair
+  "M.Id": trade.machineid || "N/A",
+  "📋": "copy", // Copy button column
+  Unique_ID: trade.unique_id || "N/A",
+  "Candle_🕒": trade.candel_time,
+  "Fetcher_🕒": trade.fetcher_trade_time,
+  "Operator_🕒": trade.operator_trade_time,
+  Pair: trade.pair
     ? `<div style="display:flex; flex-direction:column; align-items:center;">
-        <a href="https://www.binance.com/en/futures/${trade.Pair}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:underline;">${trade.Pair}</a>
-        <button onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${trade.Pair}.P', '_blank')" style="margin-top:2px;font-size:10px;padding:2px 6px;background:#eee;border:1px solid #aaa;border-radius:4px;cursor:pointer;">
+        <a href="https://www.binance.com/en/futures/${trade.pair}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:underline;">${trade.pair}</a>
+        <button onclick="window.open('https://www.tradingview.com/chart/?symbol=BINANCE:${trade.pair}.P', '_blank')" style="margin-top:2px;font-size:10px;padding:2px 6px;background:#eee;border:1px solid #aaa;border-radius:4px;cursor:pointer;">
           📈 Chart
         </button>
       </div>`
     : "N/A",
-  "⏱️": trade.Interval || "N/A",
-  "💼": trade.Action || "N/A",
-  PL: trade.Pl_after_comm != null ? parseFloat(trade.Pl_after_comm.toFixed(2)) : "N/A",
-  "🛡️_BUY": trade.Hedge_Buy_pl != null ? parseFloat(trade.Hedge_Buy_pl.toFixed(2)) : "N/A",
-  "🛡️_SELL": trade.Hedge_Sell_pl != null ? parseFloat(trade.Hedge_Sell_pl.toFixed(2)) : "N/A",
-  Type: trade.Type || "N/A",
-  "Operator_🕒❌": trade.Operator_Close_time,
-  "📡": trade.SignalFrom || "N/A",
-  PJ: trade.Profit_journey ? "✅" : "❌",
-  CJ: trade.Commision_journey ? "✅" : "❌",
-  Stop_Price: safeFixed(trade.Stop_price, 6),
-  Save_Price: safeFixed(trade.Save_price, 6),
-  Min_Comm: safeFixed(trade.Min_comm, 6),
-  "🛡️": trade.Hedge ? "✅ Yes" : "❌ No",
-  "🛡️1-1": trade.Hedge_1_1_bool ? "✅ Yes" : "❌ No",
-  "🛡️_Order_Size": trade.Hedge_order_size || "N/A",
-  "Min_Comm_After_🛡️": safeFixed(trade.Min_comm_after_hedge, 6),
-  Min_Profit: safeFixed(trade.Min_profit, 2, "$"),
-  Buy_Qty: trade.Buy_qty || 0,
-  Buy_Price: safeFixed(trade.Buy_price, 6),
-  Buy_PL: safeFixed(trade.Buy_pl, 6),
-  Added_Qty: trade.Added_qty || "N/A",
-  Sell_Qty: trade.Sell_qty || 0,
-  Sell_Price: safeFixed(trade.Sell_price, 6),
-  Sell_PL: safeFixed(trade.Sell_pl, 6),
-  Close_Price: safeFixed(trade.Close_price, 6),
-  Commission: safeFixed(trade.Commission, 2, "$"),
-  Date: trade.Candel_time ? trade.Candel_time.split(" ")[0] : "N/A",
-  Investment: safeFixed(trade.Investment, 2, "$"),
-  Swing1: safeFixed(trade.Swing1, 6),
-  Swing2: safeFixed(trade.Swing2, 6),
-  Swing3: safeFixed(trade.Swing3, 6),
-  Swing4: safeFixed(trade.Swing4, 6),
-  Swing5: safeFixed(trade.Swing5, 6),
-  HSHighP : safeFixed(trade.Hedge_Swing_High_Point, 6),
-  HSLowP : safeFixed(trade.Hedge_Swing_Low_Point, 6),
-  THighP : safeFixed(trade.Temp_High_Point, 6),
-  TlowP : safeFixed(trade.Temp_Low_Point, 6)
+  "⏱️": trade.interval || "N/A",
+  "💼": trade.action || "N/A",
+  PL: safeFixed(trade.pl_after_comm, 2),
+  "🛡️_BUY": safeFixed(trade.hedge_buy_pl, 2),
+  "🛡️_SELL": safeFixed(trade.hedge_sell_pl, 2),
+  Type: trade.type || "N/A",
+  "Operator_🕒❌": trade.operator_close_time,
+  "📡": trade.signalfrom || "N/A",
+  PJ: (() => {
+    const val = trade.profit_journey;
+    // Handle boolean, string boolean, or numeric values
+    const isTrue = val === true || val === "true" || val === 1 || (typeof val === 'string' && parseFloat(val) > 0);
+    return isTrue ? "✅" : "❌";
+  })(),
+  CJ: (() => {
+    const val = trade.commision_journey;
+    // Handle boolean, string boolean, or numeric values  
+    const isTrue = val === true || val === "true" || val === 1 || (typeof val === 'string' && parseFloat(val) > 0);
+    return isTrue ? "✅" : "❌";
+  })(),
+  Stop_Price: safeFixed(trade.stop_price, 6),
+  Save_Price: safeFixed(trade.save_price, 6),
+  Min_Comm: safeFixed(trade.min_comm, 6),
+  "🛡️": parseHedge(trade.hedge) ? "✅ Yes" : "❌ No",
+  "🛡️1-1": parseBoolean(trade.hedge_1_1_bool) ? "✅ Yes" : "❌ No",
+  "🛡️_Order_Size": trade.hedge_order_size || "N/A",
+  "Min_Comm_After_🛡️": safeFixed(trade.min_comm_after_hedge, 6),
+  Min_Profit: safeFixed(trade.min_profit, 2, "$"),
+  Buy_Qty: trade.buy_qty || 0,
+  Buy_Price: safeFixed(trade.buy_price, 6),
+  Buy_PL: safeFixed(trade.buy_pl, 6),
+  Added_Qty: trade.added_qty || "N/A",
+  Sell_Qty: trade.sell_qty || 0,
+  Sell_Price: safeFixed(trade.sell_price, 6),
+  Sell_PL: safeFixed(trade.sell_pl, 6),
+  Close_Price: safeFixed(trade.close_price, 6),
+  Commission: safeFixed(trade.commission, 2, "$"),
+  Date: trade.candel_time ? trade.candel_time.split(" ")[0] : "N/A",
+  Investment: safeFixed(trade.investment, 2, "$"),
+  Swing1: safeFixed(trade.swing1, 6),
+  Swing2: safeFixed(trade.swing2, 6),
+  Swing3: safeFixed(trade.swing3, 6),
+  Swing4: safeFixed(trade.swing4, 6),
+  Swing5: safeFixed(trade.swing5, 6),
+  HSHighP : safeFixed(trade.hedge_swing_high_point, 6),
+  HSLowP : safeFixed(trade.hedge_swing_low_point, 6),
+  THighP : safeFixed(trade.temp_high_point, 6),
+  TlowP : safeFixed(trade.temp_low_point, 6)
 });
 
 const TableView =  ({ title, tradeData, clientData, activeSubReport, setActiveSubReport }) => {
@@ -130,14 +163,14 @@ const TableView =  ({ title, tradeData, clientData, activeSubReport, setActiveSu
   // Optimized sub-report click handler
   const handleSubReportClick = useCallback((type, normalizedTitle) => {
     if (normalizedTitle === "Client_Stats") {
-      const filtered = clientData.filter(c => c.MachineId === type);
+      const filtered = clientData.filter(c => c.machineid === type);
       setFilteredData(filtered.map((client, index) => ({
         "S No": index + 1,
-        "Machine ID": client.MachineId || "N/A",
-        "Client Name": client.Name || "N/A",
-        "Active": client.Active ? "✅" : "❌",
-        "Last Ping": client.LastPing || "N/A",
-        "Region": client.Region || "N/A",
+        "Machine ID": client.machineid || "N/A",
+        "Client Name": client.name || "N/A",
+        "Active": parseBoolean(client.active) ? "✅" : "❌",
+        "Last Ping": client.lastping || "N/A",
+        "Region": client.region || "N/A",
       })));
     } else {
       setActiveSubReport(type);
@@ -445,79 +478,111 @@ const filteredAndSortedData = useMemo(() => {
   }, [filteredData, sortConfig]);
 
 useEffect(() => {
+  console.log("🔍 TableView useEffect - title:", title, "tradeData length:", tradeData?.length);
   if (!title || !tradeData || tradeData.length === 0) return;
 
-  let result = tradeData.map((trade, index) => formatTradeData(trade, index));
+  // ✅ Apply filtering on raw trade data BEFORE formatting
+  let filteredTrades = [...tradeData];
 
-  // ✅ Apply sub-report filtering
+  // ✅ Apply sub-report filtering on raw trade data
   switch (title) {
     case "Total_Closed_Stats":
-      result = result.filter(trade => trade.Type === "close" || trade.Type === "hedge_close");
+      filteredTrades = filteredTrades.filter(trade => trade.type === "close" || trade.type === "hedge_close");
       break;
     case "Direct_Closed_Stats":
-      result = result.filter(trade => trade.Type === "close");
+      filteredTrades = filteredTrades.filter(trade => {
+        const isHedge = parseHedge(trade.hedge);
+        return trade.type === "close" && !isHedge;
+      });
       break;
     case "Hedge_Closed_Stats":
-      result = result.filter(trade => trade.Type === "hedge_close" && trade.Hedge === true);
+      filteredTrades = filteredTrades.filter(trade => {
+        const isHedge = parseHedge(trade.hedge);
+        return trade.type === "hedge_close" && isHedge;
+      });
       break;
     case "Total_Running_Stats":
-      result = result.filter(trade => trade.Type === "running" && trade.Hedge_1_1_bool === false);
+      filteredTrades = filteredTrades.filter(trade => trade.type === "running" || trade.type === "hedge_hold");
       break;
     case "Assigned_New":
-      result = result.filter(trade => trade.Type === "assign" && trade.Hedge_1_1_bool === false);
+      filteredTrades = filteredTrades.filter(trade => trade.type === "assign");
       break;
     case "Direct_Running_Stats":
-      result = result.filter(trade => trade.Type === "running" && trade.Hedge === false);
+      filteredTrades = filteredTrades.filter(trade => {
+        const isHedge = parseHedge(trade.hedge);
+        return (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+      });
       break;
     case "Hedge_Running_Stats":
-      result = result.filter(trade => trade.Type === "running" && trade.Hedge === true && trade.Hedge_1_1_bool === false);
+      filteredTrades = filteredTrades.filter(trade => {
+        const isHedge = parseHedge(trade.hedge);
+        const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+        return (trade.type === "running" || trade.type === "hedge_hold") && isHedge && !isHedge11;
+      });
       break;
     case "Hedge_on_Hold":
-      result = result.filter(trade => trade.Type === "running" && trade.Hedge === true && trade.Hedge_1_1_bool === true);
+      filteredTrades = filteredTrades.filter(trade => {
+        const isHedge = parseHedge(trade.hedge);
+        const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+        return (trade.type === "running" || trade.type === "hedge_hold") && isHedge && isHedge11;
+      });
       break;
     case "Closed_Count_Stats":
-      result = result.filter((trade) => {
-        if (activeSubReport === "loss") return trade.Type === "close" && trade.Pl_after_comm < 0;
-        if (activeSubReport === "profit") return trade.Type === "close" && trade.Pl_after_comm > 0;
-        if (activeSubReport === "pj") return trade.Type === "close" && trade.Profit_journey === true;
+      filteredTrades = filteredTrades.filter((trade) => {
+        if (activeSubReport === "loss") return trade.type === "close" && trade.pl_after_comm < 0;
+        if (activeSubReport === "profit") return trade.type === "close" && trade.pl_after_comm > 0;
+        if (activeSubReport === "pj") {
+          const isProfitJourney = parseBoolean(trade.profit_journey);
+          return trade.type === "close" && isProfitJourney;
+        }
         return true;
       });
       break;
     case "Buy_Sell_Stats":
-      result = result.filter((trade) => {
-        if (!["BUY", "SELL"].includes(trade.Action)) return false;
-        if (activeSubReport === "buy") return trade.Action === "BUY";
-        if (activeSubReport === "sell") return trade.Action === "SELL";
+      filteredTrades = filteredTrades.filter((trade) => {
+        if (!["BUY", "SELL"].includes(trade.action)) return false;
+        if (activeSubReport === "buy") return trade.action === "BUY";
+        if (activeSubReport === "sell") return trade.action === "SELL";
         return true;
       });
       break;
     case "Journey_Stats_Running":
-      result = result.filter((trade) => {
-        if (activeSubReport === "pj") return trade.Profit_journey === true && trade.Pl_after_comm > 0 && trade.Type === "running";
-        if (activeSubReport === "cj") return trade.Commision_journey === true && trade.Pl_after_comm > 0 && trade.Type === "running" && !trade.Profit_journey;
-        if (activeSubReport === "bc") return trade.Pl_after_comm < 0 && trade.Type === "running";
+      filteredTrades = filteredTrades.filter((trade) => {
+        const isProfitJourney = parseBoolean(trade.profit_journey);
+        const isCommisionJourney = parseBoolean(trade.commision_journey);
+        if (activeSubReport === "pj") return isProfitJourney && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold");
+        if (activeSubReport === "cj") return isCommisionJourney && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold") && !isProfitJourney;
+        if (activeSubReport === "bc") return trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold");
         return true;
       });
       break;
     case "Client_Stats":
-      result = clientData.map((client, index) => ({
+      // Special case: handle client data separately
+      const clientResult = clientData.map((client, index) => ({
         "S No": index + 1,
-        "Machine ID": client.MachineId || "N/A",
-        "Client Name": client.Name || "N/A",
-        "Active": client.Active ? "✅" : "❌",
-        "Last Ping": client.LastPing || "N/A",
-        "Region": client.Region || "N/A",
+        "Machine ID": client.machineid || "N/A",
+        "Client Name": client.name || "N/A",
+        "Active": parseBoolean(client.active) ? "✅" : "❌",
+        "Last Ping": client.lastping || "N/A",
+        "Region": client.region || "N/A",
       }));
-      break;
+      setFilteredData(clientResult);
+      return;
     case "Min_Close_Profit":
-      result = result.filter(trade => trade.Type === "close" && trade.Min_close === "Min_close" && trade.Pl_after_comm > 0);
+      filteredTrades = filteredTrades.filter(trade => trade.type === "close" && trade.min_close === "Min_close" && trade.pl_after_comm > 0);
       break;
     case "Min_Close_Loss":
-      result = result.filter(trade => trade.Type === "close" && trade.Min_close === "Min_close" && trade.Pl_after_comm < 0);
+      filteredTrades = filteredTrades.filter(trade => trade.type === "close" && trade.min_close === "Min_close" && trade.pl_after_comm < 0);
       break;
     default:
+      console.log("⚠️ TableView - No case match for title:", title);
       break;
   }
+
+  console.log("🔍 TableView after switch - filteredTrades length:", filteredTrades.length);
+  
+  // Format the filtered trade data with correct sequential indexing
+  let result = filteredTrades.map((trade, index) => formatTradeData(trade, index));
 
   // Always apply search filter regardless of title
   const query = searchInput.trim().toLowerCase();
@@ -529,6 +594,8 @@ useEffect(() => {
     );
   }
 
+  console.log("🔍 TableView final result length:", result.length);
+  console.log("🔍 TableView final result sample:", result.slice(0, 1));
   setFilteredData(result);
 }, [title, tradeData, activeSubReport, clientData, searchInput]);
 
@@ -579,124 +646,7 @@ useEffect(() => {
     }));
   };
 
-  
-  useEffect(() => {
-    if (!Array.isArray(tradeData) || tradeData.length === 0 || !title) {
-      setFilteredData([]);
-      return;
-    }
 
-    let result = [];
-
-    switch (title) {
-      case "Total_Closed_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "close" || trade.Type === "hedge_close")
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Direct_Closed_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "close")
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Hedge_Closed_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "hedge_close" && trade.Hedge === true)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Total_Running_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "running" && trade.Hedge_1_1_bool === false)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Assigned_New":
-        result = tradeData
-          .filter(trade => trade.Type === "assign" && trade.Hedge_1_1_bool === false)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Direct_Running_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "running" && trade.Hedge === false)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Hedge_Running_Stats":
-        result = tradeData
-          .filter(trade => trade.Type === "running" && trade.Hedge === true && trade.Hedge_1_1_bool === false)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Hedge_on_Hold":
-        result = tradeData
-          .filter(trade => trade.Type === "running" && trade.Hedge === true && trade.Hedge_1_1_bool === true)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Total_Stats":
-        result = tradeData.map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Closed_Count_Stats":
-        result = tradeData
-          .filter((trade) => {
-            if (activeSubReport === "loss") return trade.Type === "close" && trade.Pl_after_comm < 0;
-            if (activeSubReport === "profit") return trade.Type === "close" && trade.Pl_after_comm > 0;
-            if (activeSubReport === "pj") return trade.Type === "close" && trade.Profit_journey === true;
-            return true;
-          })
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Buy_Sell_Stats":
-        result = tradeData
-          .filter((trade) => {
-            if (!["BUY", "SELL"].includes(trade.Action)) return false;
-            if (activeSubReport === "buy") return trade.Action === "BUY";
-            if (activeSubReport === "sell") return trade.Action === "SELL";
-            return true;
-          })
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Journey_Stats_Running":
-        result = tradeData
-          .filter((trade) => {
-            if (activeSubReport === "pj") return trade.Profit_journey === true && trade.Pl_after_comm > 0 && trade.Type === "running";
-            if (activeSubReport === "cj") return trade.Commision_journey === true && trade.Pl_after_comm > 0 && trade.Type === "running" && !trade.Profit_journey;
-            if (activeSubReport === "bc") return trade.Pl_after_comm < 0 && trade.Type === "running";
-            return true;
-          })
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Client_Stats":
-        result = clientData.map((client, index) => ({
-          "S No": index + 1,
-          "Machine ID": client.MachineId || "N/A",
-          "Client Name": client.Name || "N/A",
-          "Active": client.Active ? "✅" : "❌",
-          "Last Ping": client.LastPing || "N/A",
-          "Region": client.Region || "N/A",
-        }));
-        break;
-      case "Min_Close_Profit":
-        result = tradeData
-          .filter(trade => trade.Type === "close" && trade.Min_close === "Min_close" && trade.Pl_after_comm > 0)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      case "Min_Close_Loss":
-        result = tradeData
-          .filter(trade => trade.Type === "close" && trade.Min_close === "Min_close" && trade.Pl_after_comm < 0)
-          .map((trade, index) => formatTradeData(trade, index));
-        break;
-      default:
-        result = tradeData.map((trade, index) => formatTradeData(trade, index));
-    }
-
-    const query = searchInput.trim().toLowerCase();
-    if (query.length > 0) {
-      result = result.filter(row =>
-        Object.values(row).some(val =>
-          String(val).toLowerCase().includes(query)
-        )
-      );
-    }
-
-    setFilteredData(result);
-  }, [title, tradeData, activeSubReport, clientData, searchInput]);
 
   // Add conditional early return to prevent unnecessary rendering
   // (Moved subReportButtons below to allow always showing buttons even if no data)
@@ -745,6 +695,7 @@ useEffect(() => {
   const query = searchInput?.trim()?.toLowerCase();
   const isQueryActive = query && query.length > 0;
   const isFilteredEmpty = filteredData.length === 0;
+  console.log("🔍 TableView render - filteredData.length:", filteredData.length);
 
   if (isFilteredEmpty && !isQueryActive) {
     return (
@@ -1092,42 +1043,56 @@ return (
         >
           <tr>
             {Object.keys(sortedData[0] || {}).map((key, index) => {
-              const isSticky = index < 3;
+              const isSticky = index < 4; // Updated to include copy column
+              const isCopyColumn = key === "📋";
               return (
                 <th
                   key={key}
-                  onClick={() => handleSort(key)}   // ✅ Clicking anywhere will sort
-                  className={`relative px-4 py-2 text-left cursor-pointer whitespace-nowrap`}
+                  onClick={isCopyColumn ? undefined : () => handleSort(key)}   // Copy column is not sortable
+                  className={`relative px-4 py-2 text-left whitespace-nowrap ${
+                    isCopyColumn ? "cursor-default" : "cursor-pointer"
+                  } ${
+                    index === 0 && "min-w-[50px] max-w-[50px] sticky left-0 bg-teal-700 text-white z-[5]"
+                  } ${
+                    index === 1 && "min-w-[60px] max-w-[60px] sticky left-[50px] bg-teal-700 text-white z-[5]"
+                  } ${
+                    index === 2 && "min-w-[30px] max-w-[30px] sticky left-[110px] bg-teal-700 text-white z-[5] text-center"
+                  } ${
+                    index === 3 && "min-w-[170px] max-w-[170px] sticky left-[140px] bg-teal-700 text-white z-[5]"
+                  }`}
                   style={{ fontSize: "inherit" }}
                 >
                   <div className="flex items-center justify-between">
                     <span>{key.replace(/_/g, " ")}</span>
 
-                    {/* Only Visual Sort Icon (no click needed inside it!) */}
-                    <span className="ml-1">
-                      {sortConfig.key === key ? (
-                        sortConfig.direction === "asc" ? (
-                          <span className="text-yellow-300">🔼</span>
+                    {/* Only Visual Sort Icon (no click needed inside it!) - Hide for copy column */}
+                    {!isCopyColumn && (
+                      <span className="ml-1">
+                        {sortConfig.key === key ? (
+                          sortConfig.direction === "asc" ? (
+                            <span className="text-yellow-300">🔼</span>
+                          ) : (
+                            <span className="text-yellow-300">🔽</span>
+                          )
                         ) : (
-                          <span className="text-yellow-300">🔽</span>
-                        )
-                      ) : (
-                        <span className="opacity-60">⇅</span>
-                      )}
-                    </span>
+                          <span className="opacity-60">⇅</span>
+                        )}
+                      </span>
+                    )}
 
-                    {/* &#128269;
-                    Filter icon (keep e.stopPropagation() inside only for this) */}
-                    <span
-                      className="ml-1 cursor-pointer filter-icon"
-                      data-index={index}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        showFilterPopup(index, e);
-                      }}
-                    >
-                      &#128269;
-                    </span>
+                    {/* Filter icon (keep e.stopPropagation() inside only for this) - Hide for copy column */}
+                    {!isCopyColumn && (
+                      <span
+                        className="ml-1 cursor-pointer filter-icon"
+                        data-index={index}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showFilterPopup(index, e);
+                        }}
+                      >
+                        &#128269;
+                      </span>
+                    )}
                   </div>
                 </th>
               );
@@ -1154,9 +1119,10 @@ return (
                       className={`
                         px-2 py-1 whitespace-nowrap align-top text-sm select-text
                         ${selectedRow === rowIndex ? 'text-amber-900' : 'text-sky-500 dark:text-yellow-300'}
-                        ${colIndex === 0 && "min-w-[90px] max-w-[90px] sticky left-0 bg-[#046e7a] text-white z-[5] text-xs"}
-                        ${colIndex === 1 && "min-w-[100px] max-w-[100px] sticky left-[90px] bg-[#046e7a] text-white z-[5] text-[10px] font-light"}
-                        ${colIndex === 2 && "min-w-[170px] max-w-[170px] sticky left-[190px] bg-[#046e7a] text-white z-[5] text-[12px] leading-snug"}
+                        ${colIndex === 0 && "min-w-[50px] max-w-[50px] sticky left-0 bg-[#046e7a] text-white z-[5] text-xs"}
+                        ${colIndex === 1 && "min-w-[60px] max-w-[60px] sticky left-[50px] bg-[#046e7a] text-white z-[5] text-[10px] font-light"}
+                        ${colIndex === 2 && "min-w-[30px] max-w-[30px] sticky left-[110px] bg-[#046e7a] text-white z-[5] text-center"}
+                        ${colIndex === 3 && "min-w-[170px] max-w-[170px] sticky left-[140px] bg-[#046e7a] text-white z-[5] text-[12px] leading-snug"}
                       `}
                       style={{ fontSize: "inherit" }}
                       dangerouslySetInnerHTML={{
@@ -1165,13 +1131,64 @@ return (
                           : val.replace(/color:(#[A-Fa-f0-9]{6}|[a-zA-Z]+)/g, 'color:#0ea5e9')
                       }}
                     />
+                  ) : key === "📋" ? (
+                    <td
+                      key={colIndex}
+                      className={`
+                        px-1 py-1 whitespace-nowrap align-top text-sm
+                        ${colIndex === 2 && "min-w-[30px] max-w-[30px] sticky left-[110px] bg-[#046e7a] text-white z-[5] text-center"}
+                      `}
+                      style={{ fontSize: "inherit" }}
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const uniqueId = item.Unique_ID;
+                          if (uniqueId && uniqueId !== "N/A") {
+                            navigator.clipboard.writeText(uniqueId).then(() => {
+                              // Show brief feedback
+                              const button = e.target;
+                              const originalText = button.textContent;
+                              button.textContent = "✓";
+                              button.className = "text-green-400 text-xs px-1 py-0.5 rounded hover:bg-gray-600 transition-all";
+                              setTimeout(() => {
+                                button.textContent = originalText;
+                                button.className = "text-gray-300 hover:text-white text-xs px-1 py-0.5 rounded hover:bg-gray-600 transition-all cursor-pointer";
+                              }, 1000);
+                            }).catch(() => {
+                              // Fallback for older browsers
+                              const textArea = document.createElement('textarea');
+                              textArea.value = uniqueId;
+                              document.body.appendChild(textArea);
+                              textArea.select();
+                              document.execCommand('copy');
+                              document.body.removeChild(textArea);
+                              
+                              // Show feedback
+                              const button = e.target;
+                              const originalText = button.textContent;
+                              button.textContent = "✓";
+                              button.className = "text-green-400 text-xs px-1 py-0.5 rounded hover:bg-gray-600 transition-all";
+                              setTimeout(() => {
+                                button.textContent = originalText;
+                                button.className = "text-gray-300 hover:text-white text-xs px-1 py-0.5 rounded hover:bg-gray-600 transition-all cursor-pointer";
+                              }, 1000);
+                            });
+                          }
+                        }}
+                        className="text-gray-300 hover:text-white text-xs px-1 py-0.5 rounded hover:bg-gray-600 transition-all cursor-pointer"
+                        title="Click to copy Unique ID"
+                      >
+                        📋
+                      </button>
+                    </td>
                   ) : (
                     colIndex === 0 ? (
                       <td
                         key={colIndex}
                         className={`
                           px-2 py-1 whitespace-nowrap align-top text-sm select-text
-                          min-w-[90px] max-w-[90px] sticky left-0 bg-[#046e7a] text-white z-[5] text-xs
+                          min-w-[50px] max-w-[50px] sticky left-0 bg-[#046e7a] text-white z-[5] text-xs
                         `}
                         style={{ fontSize: "inherit" }}
                       >
@@ -1183,8 +1200,9 @@ return (
                         key={colIndex}
                         className={`
                           px-2 py-1 whitespace-nowrap align-top text-sm select-text
-                          ${colIndex === 1 && "min-w-[100px] max-w-[100px] sticky left-[90px] bg-[#046e7a] text-white z-[5] text-[10px] font-light"}
-                          ${colIndex === 2 && "min-w-[170px] max-w-[170px] sticky left-[190px] bg-[#046e7a] text-white z-[5] text-[12px] leading-snug"}
+                          ${colIndex === 1 && "min-w-[60px] max-w-[60px] sticky left-[50px] bg-[#046e7a] text-white z-[5] text-[10px] font-light"}
+                          ${colIndex === 2 && "min-w-[30px] max-w-[30px] sticky left-[110px] bg-[#046e7a] text-white z-[5] text-center"}
+                          ${colIndex === 3 && "min-w-[170px] max-w-[170px] sticky left-[140px] bg-[#046e7a] text-white z-[5] text-[12px] leading-snug"}
                           ${["Candle_Time", "Fetcher_Trade_Time", "Operator_Trade_Time", "Operator_Close_Time"].includes(key) ? "text-[11px]" : ""}
                           ${["Type", "Action", "Interval", "CJ", "PJ"].includes(key) ? "min-w-[60px] max-w-[60px] text-center" : ""}
                           ${key === "Unique_ID" ? "text-black" : ""}
@@ -1200,21 +1218,21 @@ return (
                             const timestamp = val.slice(splitIndex).replace("T", " ");
                             return (
                               <div 
-                                className="cursor-pointer hover:underline hover:text-blue-600"
+                                className="cursor-pointer font-bold text-yellow-400 hover:underline hover:text-yellow-300"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   window.open(`/live-trade-view?uid=${encodeURIComponent(val)}`, '_blank');
                                 }}
                                 title="Click to view live trade details"
                               >
-                                <div className="font-bold leading-tight">{pair}</div>
+                                <div className="leading-tight">{pair}</div>
                                 <div className="opacity-80 -mt-[2px] leading-tight">{timestamp}</div>
                               </div>
                             );
                           })()
                         ) : key === "Unique_ID" && typeof val === "string" && val !== "N/A" ? (
                           <div 
-                            className="cursor-pointer hover:underline hover:text-blue-600"
+                            className="cursor-pointer font-bold text-yellow-400 hover:underline hover:text-yellow-300"
                             onClick={(e) => {
                               e.stopPropagation();
                               window.open(`/live-trade-view?uid=${encodeURIComponent(val)}`, '_blank');
@@ -1224,7 +1242,17 @@ return (
                             {val}
                           </div>
                         ) : (
-                          key === "PL_After_Comm" && val !== "N/A" ? `$${val}` : val
+                          key === "PL" ? (
+                            val !== "N/A" ? (
+                              <span className={
+                                selectedRow === rowIndex 
+                                  ? (parseFloat(val) >= 0 ? "text-green-800" : "text-black")
+                                  : (parseFloat(val) >= 0 ? "text-green-400" : "text-red-400")
+                              }>
+                                {val}
+                              </span>
+                            ) : val
+                          ) : key === "PL_After_Comm" && val !== "N/A" ? `$${val}` : val
                         )}
                       </td>
                     )

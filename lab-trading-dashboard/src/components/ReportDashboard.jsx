@@ -3,6 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import PairStatsGrid from './PairStatsGrid';
 import PairStatsFilters from './PairStatsFilters';
 import Sidebar from './Sidebar';
+import RefreshControls from './RefreshControls';
+
+// Helper functions for consistent data parsing
+const parseHedge = (hedgeValue) => {
+  if (hedgeValue === true || hedgeValue === "true" || hedgeValue === 1 || hedgeValue === "1") return true;
+  if (hedgeValue === false || hedgeValue === "false" || hedgeValue === 0 || hedgeValue === "0" || 
+      hedgeValue === null || hedgeValue === undefined) return false;
+  if (typeof hedgeValue === 'string') {
+    const numValue = parseFloat(hedgeValue);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
+
+const parseBoolean = (value) => {
+  if (value === true || value === "true" || value === 1 || value === "1") return true;
+  if (typeof value === 'string') {
+    const numValue = parseFloat(value);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
 // Animated SVG background for LAB title (copied from main dashboard)
 function AnimatedGraphBackground({ width = 400, height = 80, opacity = 0.4 }) {
   const [points1, setPoints1] = useState([]);
@@ -99,7 +121,9 @@ const ReportDashboard = () => {
   // State for group selection feature
   const [groupModeEnabled, setGroupModeEnabled] = useState(false);
   const [selectedGroupPairs, setSelectedGroupPairs] = useState([]);
+  // Add state for showForClubFilter
   const [showForClubFilter, setShowForClubFilter] = useState('All');
+  const [visiblePairs, setVisiblePairs] = useState([]); // <-- Add this state
 
 
   // Filter state and logic (moved from PairStatsGrid)
@@ -120,7 +144,7 @@ const ReportDashboard = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-1.onrender.com/api/machines');
+        const res = await fetch('https://lab-code-5v36.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -134,7 +158,7 @@ const ReportDashboard = () => {
     const saved = localStorage.getItem('pair_stats_selected_machines');
     if (saved) return JSON.parse(saved);
     const obj = {};
-    allMachines.forEach(m => obj[m.MachineId] = true);
+          allMachines.forEach(m => obj[m.machineid] = true);
     return obj;
   });
   const [machineRadioMode, setMachineRadioMode] = useState(() => localStorage.getItem('pair_stats_machine_radio_mode') === 'true');
@@ -150,13 +174,13 @@ const ReportDashboard = () => {
 
   // Fetch trades data
   useEffect(() => {
-    fetch('https://lab-code-1.onrender.com/api/trades')
+    fetch('https://lab-code-1r1r.onrender.com/api/trades')
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
         setTrades(allTrades);
         // Extract unique symbols from trades
-        const uniqueSymbols = [...new Set(allTrades.map(t => t.Pair).filter(Boolean))];
+        const uniqueSymbols = [...new Set(allTrades.map(t => t.pair).filter(Boolean))];
         setSymbols(uniqueSymbols);
       })
       .catch(() => {
@@ -164,6 +188,26 @@ const ReportDashboard = () => {
         setSymbols([]);
       });
   }, []);
+
+  // Manual refresh handler combines both data sources
+  const refreshReportData = async () => {
+    try {
+      const [machinesRes, tradesRes] = await Promise.all([
+                  fetch('https://lab-code-5v36.onrender.com/api/machines'),
+        fetch('https://lab-code-5v36.onrender.com/api/trades'),
+      ]);
+      const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
+      const tradesJson = tradesRes.ok ? await tradesRes.json() : { trades: [] };
+      const machinesList = Array.isArray(machinesJson.machines) ? machinesJson.machines : [];
+      const allTrades = Array.isArray(tradesJson.trades) ? tradesJson.trades : [];
+      setMachines(machinesList);
+      setTrades(allTrades);
+      const uniqueSymbols = [...new Set(allTrades.map(t => t.pair).filter(Boolean))];
+      setSymbols(uniqueSymbols);
+    } catch (e) {
+      // keep previous state on error
+    }
+  };
 
   useEffect(() => {
     // Debug: log unique symbols and their count
@@ -176,11 +220,11 @@ const ReportDashboard = () => {
   function filterTrades(trades) {
     return trades.filter(t => {
       // Signal filter
-      if (Object.keys(selectedSignals).length && !selectedSignals[t.SignalFrom]) return false;
+      if (Object.keys(selectedSignals).length && !selectedSignals[t.signalfrom]) return false;
       // Machine filter
-      if (Object.keys(selectedMachines).length && !selectedMachines[t.MachineId]) return false;
+      if (Object.keys(selectedMachines).length && !selectedMachines[t.machineid]) return false;
       // Action filter
-      if (Object.keys(selectedActions).length && !selectedActions[t.Action]) return false;
+      if (Object.keys(selectedActions).length && !selectedActions[t.action]) return false;
       return true;
     });
   }
@@ -188,25 +232,40 @@ const ReportDashboard = () => {
 
   // 2. Apply the stat/club filter
   function filterTradesByStat(trades, stat) {
+    if (stat === 'All') return trades;
     switch (stat) {
       case 'Total Closed Stats':
-        return trades.filter(t => t.Type === "close" || t.Type === "hedge_close");
+        return trades.filter(t => t.type === "close" || t.type === "hedge_close");
       case 'Direct Closed Stats':
-        return trades.filter(t => t.Type === "close");
+        return trades.filter(t => t.type === "close");
       case 'Hedge Closed Stats':
-        return trades.filter(t => t.Hedge === true && t.Type === "hedge_close");
+        return trades.filter(t => {
+          const isHedge = parseHedge(t.hedge);
+          return isHedge && t.type === "hedge_close";
+        });
       case 'Total Running Stats':
-        return trades.filter(t => t.Type === "running" && t.Hedge_1_1_bool === false);
+        return trades.filter(t => t.type === "running" || t.type === "hedge_hold");
       case 'Direct Running Stats':
-        return trades.filter(t => t.Type === "running" && t.Hedge === false);
+        return trades.filter(t => {
+          const isHedge = parseHedge(t.hedge);
+          return (t.type === "running" || t.type === "hedge_hold") && !isHedge;
+        });
       case 'Hedge Running Stats':
-        return trades.filter(t => t.Hedge_1_1_bool === false && t.Hedge === true && t.Type === "running");
+        return trades.filter(t => {
+          const isHedge = parseHedge(t.hedge);
+          const isHedge11 = parseBoolean(t.hedge_1_1_bool);
+          return !isHedge11 && isHedge && (t.type === "running" || t.type === "hedge_hold");
+        });
       case 'Total Stats':
         return trades;
       case 'Buy Sell Stats':
-        return trades.filter(t => t.Action === "BUY" || t.Action === "SELL");
+        return trades.filter(t => t.action === "BUY" || t.action === "SELL");
       case 'Hedge on Hold':
-        return trades.filter(t => t.Hedge === true && t.Hedge_1_1_bool === true);
+        return trades.filter(t => {
+          const isHedge = parseHedge(t.hedge);
+          const isHedge11 = parseBoolean(t.hedge_1_1_bool);
+          return isHedge && isHedge11 && (t.type === "running" || t.type === "hedge_hold");
+        });
       default:
         return trades;
     }
@@ -214,7 +273,7 @@ const ReportDashboard = () => {
   const filteredTradesByStat = filterTradesByStat(fullyFilteredTrades, showForClubFilter);
 
   // 3. Extract unique symbols for the grid
-  const filteredSymbols = [...new Set(filteredTradesByStat.map(t => t.Pair).filter(Boolean))];
+  const filteredSymbols = [...new Set(filteredTradesByStat.map(t => t.pair).filter(Boolean))];
 
   useEffect(() => {
     // Debug: log filtered symbols and their count for the selected stat
@@ -251,11 +310,11 @@ const ReportDashboard = () => {
   function filterTrades(trades) {
     return trades.filter(t => {
       // Signal filter
-      if (Object.keys(selectedSignals).length && !selectedSignals[t.SignalFrom]) return false;
+      if (Object.keys(selectedSignals).length && !selectedSignals[t.signalfrom]) return false;
       // Machine filter
-      if (Object.keys(selectedMachines).length && !selectedMachines[t.MachineId]) return false;
+      if (Object.keys(selectedMachines).length && !selectedMachines[t.machineid]) return false;
       // Action filter
-      if (Object.keys(selectedActions).length && !selectedActions[t.Action]) return false;
+      if (Object.keys(selectedActions).length && !selectedActions[t.action]) return false;
       return true;
     });
   }
@@ -306,7 +365,7 @@ const ReportDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Only show grid for filteredSymbols
-  const tradesForGrid = filteredTradesByStat.filter(t => filteredSymbols.includes(t.Pair));
+  const tradesForGrid = filteredTradesByStat.filter(t => filteredSymbols.includes(t.pair));
 
   return (
     <div style={{ minHeight: '100vh', width: '100vw', position: 'relative', background: darkMode ? '#000' : '#f8fafc', display: 'flex' }}>
@@ -315,112 +374,132 @@ const ReportDashboard = () => {
       {/* Main content: LAB header, filters, grid/list */}
       <div style={{ flex: 1, minWidth: 0, marginLeft: isSidebarOpen ? '256px' : '80px', transition: 'margin-left 0.3s', padding: '0 24px' }}>
         {/* LAB header (copied from main dashboard) */}
-        <div className="sticky top-0 z-40 flex justify-center items-center border-b border-gray-200 dark:border-gray-700 shadow-sm bg-[#f5f6fa] dark:bg-black" style={{ minHeight: '80px', height: '80px', padding: '0 16px' }}>
-          <button
-            onClick={() => setIsSidebarOpen(o => !o)}
-            className="absolute left-4 top-3 z-20 p-2 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-110 transition-all"
-            title={isSidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
-            style={{ fontSize: 24 }}
-          >
-            <span style={{ fontSize: 24 }}>{isSidebarOpen ? '🡸' : '☰'}</span>
-          </button>
-          {/* Dark/Bright mode toggle button (right side) */}
-          <button
-            onClick={() => setDarkMode(dm => !dm)}
-            className="absolute right-8 top-3 z-20 p-2 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-110 transition-all"
-            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            style={{ fontSize: 24 }}
-          >
-            {darkMode ? '🌞' : '🌙'}
-          </button>
-          <AnimatedGraphBackground width={400} height={48} opacity={0.4} />
+        <div className="sticky top-0 z-40 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 shadow-sm bg-[#f5f6fa] dark:bg-black" style={{ minHeight: '80px', height: '80px', padding: '0 16px', position: 'relative', overflow: 'hidden' }}>
+          {/* Animated background fills the header */}
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none' }}>
+            <AnimatedGraphBackground width={1600} height={80} opacity={0.4} />
+          </div>
+          {/* Left: Sidebar toggle (if any) */}
+          <div style={{ width: 48, zIndex: 1 }} />
+          {/* Center: LAB title */}
           <h1
-            className="relative z-10 text-5xl font-extrabold text-center bg-gradient-to-r from-blue-500 via-pink-500 to-yellow-400 bg-clip-text text-transparent drop-shadow-lg tracking-tight animate-pulse"
-            style={{ WebkitTextStroke: '1px #222', textShadow: '0 4px 24px rgba(0,0,0,0.18)' }}
+            className="relative z-10 text-4xl font-extrabold text-center bg-gradient-to-r from-blue-500 via-pink-500 to-yellow-400 bg-clip-text text-transparent drop-shadow-lg tracking-tight animate-pulse"
+            style={{ WebkitTextStroke: '1px #222', textShadow: '0 4px 24px rgba(0,0,0,0.18)', margin: 0, zIndex: 1 }}
           >
             LAB
             <span className="block w-16 h-1 mx-auto mt-2 rounded-full bg-gradient-to-r from-blue-400 via-pink-400 to-yellow-300 animate-gradient-x"></span>
           </h1>
+          {/* Right: Group controls and dark mode button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 0, zIndex: 1 }}>
+            <RefreshControls
+              onRefresh={refreshReportData}
+              storageKey="report_dashboard"
+              initialIntervalSec={60}
+              initialAutoOn={false}
+            />
+            <button
+              onClick={() => setGroupModeEnabled(g => !g)}
+              style={{
+                background: groupModeEnabled ? 'linear-gradient(90deg, #22c55e 60%, #16a34a 100%)' : 'linear-gradient(90deg, #e5e7eb 60%, #d1d5db 100%)',
+                color: groupModeEnabled ? '#fff' : '#222',
+                border: 'none',
+                borderRadius: 10,
+                padding: '6px 14px',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: 'pointer',
+                marginRight: 4,
+                boxShadow: groupModeEnabled ? '0 2px 8px #22c55e44' : '0 1px 2px #8882',
+                transition: 'all 0.18s cubic-bezier(.4,2,.6,1)',
+                transform: groupModeEnabled ? 'scale(1.04)' : 'scale(1)',
+                outline: groupModeEnabled ? '2px solid #22c55e' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              className={groupModeEnabled ? 'animate-pulse' : ''}
+              title="Enable/Disable Group Mode"
+            >
+              <span style={{ fontSize: 18 }}>{groupModeEnabled ? '👥' : '👤'}</span>
+              Group Mode
+            </button>
+            <button
+              onClick={() => {
+                const visibleSet = new Set(visiblePairs);
+                const selectedSet = new Set(selectedGroupPairs);
+                const allVisibleSelected = visiblePairs.every(p => selectedSet.has(p));
+                if (allVisibleSelected) {
+                  // Deselect only visible pairs
+                  setSelectedGroupPairs(selectedGroupPairs.filter(p => !visibleSet.has(p)));
+                } else {
+                  // Add all visible pairs to selection (no duplicates)
+                  setSelectedGroupPairs(Array.from(new Set([...selectedGroupPairs, ...visiblePairs])));
+                }
+              }}
+              disabled={!groupModeEnabled}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 10,
+                border: 'none',
+                background: groupModeEnabled ? '#2563eb' : '#e5e7eb',
+                color: groupModeEnabled ? '#fff' : '#888',
+                fontWeight: 700,
+                fontSize: 15,
+                boxShadow: groupModeEnabled ? '0 2px 8px #2563eb44' : '0 1px 2px #8882',
+                cursor: groupModeEnabled ? 'pointer' : 'not-allowed',
+                opacity: groupModeEnabled ? 1 : 0.6,
+                transition: 'all 0.18s cubic-bezier(.4,2,.6,1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              title="Select/Unselect All"
+            >
+              <span style={{ fontSize: 18 }}>{selectedGroupPairs.length === visiblePairs.length ? '✅' : '☑️'}</span>
+              Select All
+            </button>
+            <button
+              onClick={() => {
+                const symbols = selectedGroupPairs.join(',');
+                navigate(`/pages/group-view?symbols=${encodeURIComponent(symbols)}&interval=${encodeURIComponent(interval)}&type=${encodeURIComponent(candleType)}`);
+              }}
+              disabled={selectedGroupPairs.length === 0}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 10,
+                border: 'none',
+                background: selectedGroupPairs.length > 0 ? 'linear-gradient(90deg, #6366f1 60%, #0ea5e9 100%)' : '#e5e7eb',
+                color: selectedGroupPairs.length > 0 ? '#fff' : '#888',
+                fontWeight: 700,
+                fontSize: 15,
+                boxShadow: selectedGroupPairs.length > 0 ? '0 2px 8px #6366f144' : '0 1px 2px #8882',
+                cursor: selectedGroupPairs.length > 0 ? 'pointer' : 'not-allowed',
+                opacity: selectedGroupPairs.length > 0 ? 1 : 0.6,
+                transition: 'all 0.18s cubic-bezier(.4,2,.6,1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                animation: selectedGroupPairs.length > 0 ? 'pulse 1.2s infinite' : 'none',
+              }}
+              title="View Selected Group"
+            >
+              <span style={{ fontSize: 18 }}>➡️</span>
+              View in Group ({selectedGroupPairs.length})
+            </button>
+            {/* Dark/Bright mode toggle button (right side) */}
+            <button
+              onClick={() => setDarkMode(dm => !dm)}
+              className="z-20 p-2 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-110 transition-all"
+              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              style={{ fontSize: 22, marginLeft: 10 }}
+            >
+              {darkMode ? '🌞' : '🌙'}
+            </button>
+          </div>
         </div>
         {/* Filter bar, grid/list, etc. */}
             {/* Group Selection Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-              <button
-            onClick={() => setGroupModeEnabled(g => !g)}
-                style={{
-              background: groupModeEnabled ? '#22c55e' : '#d1d5db',
-              color: groupModeEnabled ? '#fff' : '#222',
-                  border: 'none',
-              borderRadius: 8,
-              padding: '8px 18px',
-              fontWeight: 600,
-              fontSize: 16,
-                  cursor: 'pointer',
-              marginRight: 8,
-                }}
-              >
-                {groupModeEnabled ? 'Group Mode Enabled' : 'Enable Group Mode'}
-              </button>
-          {/* Show for club dropdown is always visible */}
-              <select
-                value={showForClubFilter}
-            onChange={e => setShowForClubFilter(e.target.value)}
-            style={{
-              fontSize: 16,
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1.5px solid #888',
-              background: '#fff',
-              color: '#222',
-              fontWeight: 500,
-              minWidth: 220,
-              marginRight: 8,
-            }}
-          >
-                <option value="Total Closed Stats">Total Closed Stats</option>
-                <option value="Direct Closed Stats">Direct Closed Stats</option>
-                <option value="Hedge Closed Stats">Hedge Closed Stats</option>
-                <option value="Total Running Stats">Total Running Stats</option>
-                <option value="Direct Running Stats">Direct Running Stats</option>
-                <option value="Hedge Running Stats">Hedge Running Stats</option>
-                <option value="Total Stats">Total Stats</option>
-                <option value="Buy Sell Stats">Buy Sell Stats</option>
-                <option value="Hedge on Hold">Hedge on Hold</option>
-              </select>
-              <button
-                onClick={() => {
-                  const allVisiblePairs = trades.map(t => t.Pair);
-                  const uniquePairs = [...new Set(allVisiblePairs)];
-                  if (selectedGroupPairs.length === uniquePairs.length) {
-                    setSelectedGroupPairs([]);
-                  } else {
-                    setSelectedGroupPairs(uniquePairs);
-                  }
-                }}
-                disabled={!groupModeEnabled}
-                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #ccc' }}
-              >
-                {selectedGroupPairs.length === trades.map(t => t.Pair).filter((v, i, a) => a.indexOf(v) === i).length ? 'Unselect All' : 'Select All'}
-              </button>
-              <button
-                onClick={() => {
-                  const symbols = selectedGroupPairs.join(',');
-                  navigate(`/pages/group-view?symbols=${encodeURIComponent(symbols)}&interval=${encodeURIComponent(interval)}&type=${encodeURIComponent(candleType)}`);
-                }}
-                disabled={selectedGroupPairs.length === 0}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: selectedGroupPairs.length > 0 ? '#3b82f6' : '#9ca3af',
-                  color: 'white',
-                  fontWeight: '600',
-                  cursor: selectedGroupPairs.length > 0 ? 'pointer' : 'not-allowed',
-                }}
-              >
-                View in Group ({selectedGroupPairs.length})
-              </button>
-            </div>
+
             <PairStatsGrid
               key="main-grid"
               onPairSelect={handlePairSelect}
@@ -433,6 +512,9 @@ const ReportDashboard = () => {
               groupModeEnabled={groupModeEnabled}
               selectedGroupPairs={selectedGroupPairs}
               setSelectedGroupPairs={setSelectedGroupPairs}
+              showForClubFilter={showForClubFilter}
+              setShowForClubFilter={setShowForClubFilter}
+              onVisiblePairsChange={setVisiblePairs}
             />
       </div>
     </div>

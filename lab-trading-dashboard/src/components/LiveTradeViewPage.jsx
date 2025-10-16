@@ -5,6 +5,7 @@ import PairStatsGrid from './PairStatsGrid';
 import PairStatsFilters from './PairStatsFilters';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import * as XLSX from 'xlsx';
 
 // loveleet work
 function useQuery() {
@@ -378,7 +379,7 @@ const LiveTradeViewPage = () => {
 
   // Save selectedSignals to localStorage when it changes
   useEffect(() => {
-    console.log('📡 Saving selectedSignals to localStorage:', selectedSignals);
+
     localStorage.setItem('liveTradeView_selected_signals', JSON.stringify(selectedSignals));
   }, [selectedSignals]);
 
@@ -386,7 +387,7 @@ const LiveTradeViewPage = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-1.onrender.com/api/machines');
+        const res = await fetch('https://lab-code-5v36.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -398,7 +399,7 @@ const LiveTradeViewPage = () => {
   const allMachines = machines.filter(m => m.Active);
   const [selectedMachines, setSelectedMachines] = useState(() => {
     const saved = localStorage.getItem('liveTradeView_selected_machines');
-    console.log('🏭 Loading selectedMachines from localStorage:', saved);
+
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -409,7 +410,7 @@ const LiveTradeViewPage = () => {
     // Default: select all machines
     const obj = {};
     allMachines.forEach(m => obj[m.MachineId] = true);
-    console.log('🏭 Default selectedMachines:', obj);
+
     return obj;
   });
   const [machineRadioMode, setMachineRadioMode] = useState(() => localStorage.getItem('liveTradeView_machine_radio_mode') === 'true');
@@ -417,7 +418,7 @@ const LiveTradeViewPage = () => {
 
   // Save selectedMachines to localStorage when it changes
   useEffect(() => {
-    console.log('🏭 Saving selectedMachines to localStorage:', selectedMachines);
+
     localStorage.setItem('liveTradeView_selected_machines', JSON.stringify(selectedMachines));
   }, [selectedMachines]);
 
@@ -431,7 +432,7 @@ const LiveTradeViewPage = () => {
 
   // Save selectedActions to localStorage when it changes
   useEffect(() => {
-    console.log('⚡ Saving selectedActions to localStorage:', selectedActions);
+
     localStorage.setItem('liveTradeView_selected_actions', JSON.stringify(selectedActions));
   }, [selectedActions]);
 
@@ -439,12 +440,12 @@ const LiveTradeViewPage = () => {
   const [trades, setTrades] = useState([]);
   useEffect(() => {
     // Fetch all trades like the main grid does, then filter by pair
-    fetch('https://lab-code-1.onrender.com/api/trades')
+          fetch('https://lab-code-5v36.onrender.com/api/trades')
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
         // Filter by pair if specified
-        const tradesArray = uid ? allTrades.filter(t => t.Pair === uid) : allTrades;
+        const tradesArray = uid ? allTrades.filter(t => t.pair === uid) : allTrades;
         setTrades(tradesArray);
 
       })
@@ -469,22 +470,22 @@ const LiveTradeViewPage = () => {
     setCurrentPage(1); // Reset to first page when uid changes
     // Fetch bot event logs filtered by UID from the database using existing API with pagination
     const url = uid 
-      ? `https://lab-code-1.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`
-      : `https://lab-code-1.onrender.com/api/bot-event-logs?page=1&limit=${logsPerPage}`;
+              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`
+        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=1&limit=${logsPerPage}`;
     
-    console.log('🌐 Fetching bot event logs from URL:', url);
+
     
     fetch(url)
       .then(res => {
-        console.log('📡 API Response status:', res.status);
-        console.log('📡 API Response headers:', res.headers);
+
+
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         return res.json();
       })
       .then(data => {
-        console.log('📦 API Response data:', data);
+
         const logsArray = Array.isArray(data.logs) ? data.logs : [];
         setLogs(logsArray);
         setTotalLogs(data.pagination?.total || logsArray.length);
@@ -554,23 +555,18 @@ const LiveTradeViewPage = () => {
 
   // Filter trades for signals, machines, and actions only (symbol filtering is now done at database level)
   function filterBotEventLogs(logs) {
-    console.log('🔍 DEBUG FILTERING:');
-    console.log('📊 Input logs length:', logs.length);
-    console.log('🏭 Selected machines:', selectedMachines);
-    console.log('📝 Sample log machine_id:', logs[0]?.machine_id);
-    console.log('📝 Sample log full structure:', logs[0]);
-    
+
     const filtered = logs.filter(log => {
       // Filter by machine if specified
       if (Object.keys(selectedMachines).length && !selectedMachines[log.machine_id]) {
-        console.log(`❌ Filtered out log ${log.id} - machine_id "${log.machine_id}" not in selected machines`);
+
         return false;
       }
       return true;
     });
     
-    console.log('✅ Filtered logs length:', filtered.length);
-    console.log('🔧 Since selectedMachines is empty, all logs should pass through');
+
+
     return filtered;
   }
   const filteredBotEventLogs = filterBotEventLogs(logs);
@@ -589,8 +585,8 @@ const LiveTradeViewPage = () => {
     // Refetch data with new page size
     setLogsLoading(true);
     const url = uid 
-      ? `https://lab-code-1.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`
-      : `https://lab-code-1.onrender.com/api/bot-event-logs?page=1&limit=${newRowsPerPage}`;
+              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`
+        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=1&limit=${newRowsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -600,7 +596,7 @@ const LiveTradeViewPage = () => {
         setTotalLogs(data.pagination?.total || logsArray.length);
         setTotalPages(data.pagination?.totalPages || 1);
         setLogsLoading(false);
-        console.log(`[LiveTradeViewPage] Changed to ${newRowsPerPage} rows per page, fetched ${logsArray.length} logs`);
+
       })
       .catch((error) => {
         console.error('[LiveTradeViewPage] Error fetching bot event logs:', error);
@@ -617,15 +613,15 @@ const LiveTradeViewPage = () => {
     setCurrentPage(newPage);
     
     const url = uid 
-      ? `https://lab-code-1.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`
-      : `https://lab-code-1.onrender.com/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`;
+              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`
+        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
       .then(data => {
         const logsArray = Array.isArray(data.logs) ? data.logs : [];
         setLogs(logsArray);
-        console.log(`[LiveTradeViewPage] Fetched ${logsArray.length} logs for uid: ${uid || 'all'} (Page ${newPage} of ${data.pagination?.totalPages || 1})`);
+
       })
       .catch((error) => {
         console.error('[LiveTradeViewPage] Error fetching bot event logs:', error);
@@ -681,13 +677,13 @@ const LiveTradeViewPage = () => {
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-green-500">
-            {filteredBotEventLogs.filter(log => log.Pl_after_comm > 0).length}
+                          {filteredBotEventLogs.filter(log => log.pl_after_comm > 0).length}
           </div>
           <div className="text-sm text-gray-500">Positive PL</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-red-500">
-            {filteredBotEventLogs.filter(log => log.Pl_after_comm < 0).length}
+                          {filteredBotEventLogs.filter(log => log.pl_after_comm < 0).length}
           </div>
           <div className="text-sm text-gray-500">Negative PL</div>
         </div>
@@ -838,21 +834,60 @@ const LiveTradeViewPage = () => {
     const intervalSet = new Set();
     const labelMap = {};
 
-    logs.forEach((log) => {
-      if (!log.json_data) return;
-      let json;
-      try {
-        if (typeof log.json_data === 'string') {
-          // Replace NaN, Infinity, -Infinity with null for invalid JSON
-          let raw = log.json_data.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
-          json = JSON.parse(raw);
-        } else {
-          json = log.json_data;
+    logs.forEach((log, index) => {
+      console.log(`=== Log ${index} ===`);
+      console.log('Full log object:', log);
+      
+      // Try parsed_json_message first, fallback to json_data
+      let json = null;
+      if (log.parsed_json_message && typeof log.parsed_json_message === 'object') {
+        json = log.parsed_json_message;
+        console.log('Using parsed_json_message:', json);
+      } else if (log.json_data) {
+        try {
+          if (typeof log.json_data === 'string') {
+            // Replace NaN, Infinity, -Infinity with null for invalid JSON
+            let raw = log.json_data.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
+            json = JSON.parse(raw);
+            console.log('Parsed json_data:', json);
+          } else {
+            json = log.json_data;
+            console.log('Using json_data directly:', json);
+          }
+        } catch (error) {
+          console.error('Error parsing json_data:', error);
+          console.error('Problematic json_data:', log.json_data);
+          return;
         }
-      } catch {
+      }
+
+      if (!json) {
+        console.log('No valid JSON data found');
         return;
       }
-      const allRows = json?.signal_data?.all_last_rows;
+
+      // Log the structure of signal_data and all_last_rows
+      console.log('json.signal_data:', json.signal_data);
+      if (json.signal_data && json.signal_data.all_last_rows) {
+        console.log('all_last_rows keys:', Object.keys(json.signal_data.all_last_rows));
+        console.log('all_last_rows structure:', json.signal_data.all_last_rows);
+        
+        // Log each interval's structure
+        Object.entries(json.signal_data.all_last_rows).forEach(([interval, data]) => {
+          console.log(`Interval ${interval} keys:`, Object.keys(data));
+          console.log(`Interval ${interval} sample data:`, data);
+        });
+      } else {
+        console.log('No signal_data.all_last_rows found');
+      }
+
+      let allRows = undefined;
+      try {
+        allRows = json?.signal_data?.all_last_rows;
+      } catch (err) {
+        console.log('[extractJsonLabelsAndIntervals] Error accessing all_last_rows:', err, json);
+        allRows = undefined;
+      }
       if (allRows && typeof allRows === 'object') {
         Object.keys(allRows).forEach(interval => {
           if (interval === 'candle_type') return;
@@ -860,9 +895,9 @@ const LiveTradeViewPage = () => {
           const row = allRows[interval];
           if (row && typeof row === 'object') {
             Object.keys(row).forEach(label => {
-            if (!labelMap[label]) labelMap[label] = new Set();
-            labelMap[label].add(interval);
-          });
+              if (!labelMap[label]) labelMap[label] = new Set();
+              labelMap[label].add(interval);
+            });
           }
         });
       }
@@ -893,28 +928,11 @@ const LiveTradeViewPage = () => {
       setApiLoaded(true);
       
       // Console logging for debugging
-      console.log('=== LIVE TRADE VIEW DEBUG INFO ===');
-      console.log('📊 Total logs fetched:', logs.length);
-      console.log('🔍 UID parameter:', uid);
-      console.log('📋 Regular labels data:', commonColumnOptions);
-      console.log('🏷️ Active regular labels:', activeRegularLabels);
-      console.log('📄 JSON labels extracted:', labels);
-      console.log('📝 Sample log entry:', logs[0]);
-      
+
       // Show JSON message data from first few logs
-      console.log('🔍 JSON Message Data (first 3 logs):');
-      logs.slice(0, 3).forEach((log, index) => {
-        console.log(`Log ${index + 1}:`, {
-          id: log.id,
-          uid: log.uid,
-          source: log.source,
-          timestamp: log.timestamp,
-          json_message: log.json_message,
-          parsed_json: log.parsed_json_message
-        });
-      });
+
       
-      console.log('=== END DEBUG INFO ===');
+
       }
   }, [logs, uid, activeRegularLabels]);
 
@@ -1096,9 +1114,9 @@ const LiveTradeViewPage = () => {
   // Minimize regular labels state
   const [minimizeRegular, setMinimizeRegular] = useState(false);
 
-  // Add state for master interval checkboxes
+  // Add state for master interval checkboxes (match ListViewPage)
   useEffect(() => {
-    const saved = localStorage.getItem('liveTradeView_interval_master_checked');
+    const saved = localStorage.getItem('pair_stats_interval_master_checked');
     if (saved) {
       setIntervalMasterChecked(JSON.parse(saved));
     } else {
@@ -1107,7 +1125,7 @@ const LiveTradeViewPage = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('liveTradeView_interval_master_checked', JSON.stringify(intervalMasterChecked));
+    localStorage.setItem('pair_stats_interval_master_checked', JSON.stringify(intervalMasterChecked));
   }, [intervalMasterChecked]);
 
   // Add state for master regular checkbox
@@ -1332,7 +1350,7 @@ const LiveTradeViewPage = () => {
 
   // Save settings modal open state to localStorage
   useEffect(() => {
-    localStorage.setItem('listview_settings_modal_open', JSON.stringify(settingsOpen));
+    localStorage.setItem('liveTradeView_settings_modal_open', JSON.stringify(settingsOpen));
   }, [settingsOpen]);
 
   // ESC key closes modal
@@ -1527,8 +1545,368 @@ const LiveTradeViewPage = () => {
     localStorage.setItem(FILTER_TABLE_SPACING_KEY, filterTableSpacing.toString());
   }, [filterTableSpacing]);
 
+  // --- Modal Resize Handle Logic ---
+  // Add support for 8 handles: corners and sides
+  const [resizeHandle, setResizeHandle] = useState(null); // e.g., 'top-left', 'right', etc.
+  function onResizeHandleMouseDown(e, handle) {
+    e.stopPropagation();
+    setResizing(true);
+    setResizeHandle(handle);
+    const modal = modalRef.current;
+    resizeStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: modal ? modal.offsetWidth : modalSize.width,
+      height: modal ? modal.offsetHeight : modalSize.height,
+      left: modal ? modal.offsetLeft : modalPos.x,
+      top: modal ? modal.offsetTop : modalPos.y,
+    };
+    document.body.style.userSelect = 'none';
+  }
+  useEffect(() => {
+    function onResizeMove(e) {
+      if (!resizing || !resizeHandle) return;
+      let { x, y, width, height, left, top } = resizeStart.current;
+      let dx = e.clientX - x;
+      let dy = e.clientY - y;
+      let newWidth = width;
+      let newHeight = height;
+      let newLeft = modalPos.x;
+      let newTop = modalPos.y;
+      // Handle logic for each handle
+      switch (resizeHandle) {
+        case 'right':
+          newWidth = Math.max(200, width + dx);
+          break;
+        case 'left':
+          newWidth = Math.max(200, width - dx);
+          newLeft = left + dx;
+          break;
+        case 'bottom':
+          newHeight = Math.max(100, height + dy);
+          break;
+        case 'top':
+          newHeight = Math.max(100, height - dy);
+          newTop = top + dy;
+          break;
+        case 'top-left':
+          newWidth = Math.max(200, width - dx);
+          newLeft = left + dx;
+          newHeight = Math.max(100, height - dy);
+          newTop = top + dy;
+          break;
+        case 'top-right':
+          newWidth = Math.max(200, width + dx);
+          newHeight = Math.max(100, height - dy);
+          newTop = top + dy;
+          break;
+        case 'bottom-left':
+          newWidth = Math.max(200, width - dx);
+          newLeft = left + dx;
+          newHeight = Math.max(100, height + dy);
+          break;
+        case 'bottom-right':
+          newWidth = Math.max(200, width + dx);
+          newHeight = Math.max(100, height + dy);
+          break;
+        default:
+          break;
+      }
+      setModalSize({ width: newWidth, height: newHeight });
+      setModalPos({ x: newLeft, y: newTop });
+      const modal = modalRef.current;
+      if (modal) {
+        modal.style.width = newWidth + 'px';
+        modal.style.height = newHeight + 'px';
+        modal.style.left = newLeft + 'px';
+        modal.style.top = newTop + 'px';
+      }
+    }
+    function onResizeUp() {
+      setResizing(false);
+      setResizeHandle(null);
+      document.body.style.userSelect = '';
+    }
+    if (resizing) {
+      window.addEventListener('mousemove', onResizeMove);
+      window.addEventListener('mouseup', onResizeUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onResizeMove);
+      window.removeEventListener('mouseup', onResizeUp);
+    };
+  }, [resizing, modalPos, modalSize, resizeHandle]);
+
+  // --- Data Mode State (Whole Data/Table Data) ---
+
+  const [wholeLogs, setWholeLogs] = useState([]);
+  const [wholeCurrentPage, setWholeCurrentPage] = useState(1);
+  const [wholeTotalPages, setWholeTotalPages] = useState(1);
+  const [wholeTotalLogs, setWholeTotalLogs] = useState(0);
+  const [wholeLogsLoading, setWholeLogsLoading] = useState(false);
+  const [wholeSortKey, setWholeSortKey] = useState('timestamp');
+  const [wholeSortDirection, setWholeSortDirection] = useState('desc');
+
+  // --- Fetch logs in Whole Data mode ---
+  useEffect(() => {
+    // Only fetch when wholeSortKey or wholeSortDirection changes (triggered by W button clicks)
+    if (!wholeSortKey && !wholeSortDirection) return;
+    setWholeLogsLoading(true);
+    let url = `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=${wholeCurrentPage}&limit=${logsPerPage}`;
+    url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+    if (uid) url += `&uid=${encodeURIComponent(uid)}`;
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        setWholeLogs(Array.isArray(data.logs) ? data.logs : []);
+        setWholeTotalLogs(data.pagination?.total || 0);
+        setWholeTotalPages(data.pagination?.totalPages || 1);
+        setWholeLogsLoading(false);
+      })
+      .catch(() => {
+        setWholeLogs([]);
+        setWholeTotalLogs(0);
+        setWholeTotalPages(1);
+        setWholeLogsLoading(false);
+      });
+  }, [wholeCurrentPage, logsPerPage, wholeSortKey, wholeSortDirection, uid]);
+
+
+
+  // --- Whole Data mode: page change handler ---
+  const handleWholePageChange = (newPage) => {
+    if (newPage < 1 || newPage > wholeTotalPages) return;
+    setWholeCurrentPage(newPage);
+  };
+
+  // --- Whole Data mode: sort handler ---
+  const handleWholeSort = (type, key, parentKey = null, interval = null) => {
+    // Only allow regular columns for backend sort
+    if (type !== 'regular') return;
+    if (wholeSortKey === key) {
+      setWholeSortDirection(dir => (dir === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setWholeSortKey(key);
+      setWholeSortDirection('asc');
+    }
+    setSortKey({ type, key, parentKey, interval });
+  };
+
+  // --- Export Modal State ---
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // --- Excel Export Handler ---
+  const handleExportToExcel = () => {
+    // If we have whole data, show modal for export options
+    if (wholeLogs.length > 0) {
+      setShowExportModal(true);
+    } else {
+      // Table Data mode: export current page as shown
+      const exportRows = getExportRows(filteredLogs);
+      if (exportRows.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Data');
+      XLSX.writeFile(wb, 'exported_data.xlsx');
+    }
+  };
+
+  // --- Export Modal Choice Handler ---
+  const handleExportModalChoice = async (choice) => {
+    setShowExportModal(false);
+    if (choice === 'pagination') {
+      // Export current page as shown
+      const exportRows = getExportRows(wholeLogs);
+      if (exportRows.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Data');
+      XLSX.writeFile(wb, 'exported_data.xlsx');
+    } else if (choice === 'whole') {
+      // Export all filtered/sorted data from backend
+      setExportLoading(true);
+      let url = `https://lab-code-5v36.onrender.com/api/bot-event-logs?limit=all`;
+      url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+      if (uid) url += `&uid=${encodeURIComponent(uid)}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const allRows = Array.isArray(data.logs) ? data.logs : [];
+        const exportRows = getExportRows(allRows);
+        if (exportRows.length === 0) {
+          alert('No data to export!');
+          setExportLoading(false);
+          return;
+        }
+        const ws = XLSX.utils.json_to_sheet(exportRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Data');
+        XLSX.writeFile(wb, 'exported_data.xlsx');
+      } catch (e) {
+        alert('Failed to fetch all data for export.');
+      }
+      setExportLoading(false);
+    }
+  };
+
+  // --- Helper: Get visible columns in order ---
+  function getVisibleColumns() {
+    return workingLabelList.filter(item => {
+      if (item.type === 'regular') return activeRegularLabels.includes(item.value);
+      if (item.type === 'json' && Array.isArray(item.intervals)) {
+        return (item.intervals || []).some(({ interval }) => activeJsonLabels[item.value]?.[interval]);
+      }
+      return false;
+    });
+  }
+
+  // --- Helper: Format date/time for Excel export ---
+  function formatExcelDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value;
+    const pad = n => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  // --- Helper: Get row data for visible columns ---
+  function getExportRows(dataRows) {
+    const visibleCols = getVisibleColumns();
+    return dataRows.map(row => {
+      let json = {};
+      try {
+        if (typeof row.json_message === 'string') {
+          let raw = row.json_message.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
+          json = JSON.parse(raw);
+        } else {
+          json = row.json_message || {};
+        }
+      } catch { json = {}; }
+      const allRows = json?.signal_data?.all_last_rows || {};
+      const out = {};
+      visibleCols.forEach(col => {
+        let value = undefined;
+        if (col.type === 'regular') {
+          value = row[col.value];
+          // Format date/time fields
+          if (isDateField(col.value)) {
+            out[col.label] = formatExcelDate(value);
+          } else if (typeof value === 'number' && value > 1e12) {
+            out[col.label] = value.toString();
+          } else {
+            out[col.label] = value;
+          }
+        } else if (col.type === 'json' && Array.isArray(col.intervals)) {
+          (col.intervals || []).forEach(({ interval }) => {
+            if (activeJsonLabels[col.value]?.[interval]) {
+              value = allRows[interval]?.[col.value];
+              out[`${col.label} [${interval}]`] = value;
+            }
+          });
+        }
+      });
+      return out;
+    });
+  }
+
   return (
     <div className={darkMode ? 'dark' : ''} style={{ minHeight: '100vh', background: darkMode ? '#181a20' : '#f7f7fa' }}>
+
+      {showExportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.25)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={{
+            background: darkMode ? '#23272f' : '#fff',
+            color: darkMode ? '#fff' : '#222',
+            padding: 32,
+            borderRadius: 16,
+            fontSize: 20,
+            fontWeight: 600,
+            boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
+            minWidth: 340,
+            minHeight: 120,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 24,
+          }}>
+            <div>Export Data</div>
+            <div style={{ display: 'flex', gap: 18 }}>
+              <button
+                onClick={() => handleExportModalChoice('pagination')}
+                style={{
+                  padding: '8px 24px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  background: '#0ea5e9',
+                  color: '#fff',
+                  boxShadow: '0 2px 8px #0ea5e944',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                Export Current Page
+              </button>
+              <button
+                onClick={() => handleExportModalChoice('whole')}
+                style={{
+                  padding: '8px 24px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  background: '#22c55e',
+                  color: '#fff',
+                  boxShadow: '0 2px 8px #22c55e44',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                Export All Filtered Data
+              </button>
+            </div>
+            <button
+              onClick={() => setShowExportModal(false)}
+              style={{
+                marginTop: 12,
+                background: 'none',
+                border: 'none',
+                color: darkMode ? '#fff' : '#222',
+                fontSize: 18,
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {exportLoading && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: darkMode ? '#23272f' : '#fff', color: darkMode ? '#fff' : '#222', padding: 32, borderRadius: 16, fontSize: 22, fontWeight: 600, boxShadow: '0 4px 32px rgba(0,0,0,0.18)' }}>
+            Exporting data...
+          </div>
+        </div>
+      )}
       {/* Font Controls and Wrap Labels - Above Settings Button */}
       <div style={{ position: 'absolute', top: 8, right: 200, zIndex: 100, display: 'flex', alignItems: 'center', gap: 12 }}>
         {/* Spacing control buttons */}
@@ -1704,6 +2082,42 @@ const LiveTradeViewPage = () => {
               pointerEvents: settingsOpen ? 'auto' : 'none',
             }}
           >
+            {/* Resize handles: corners and sides */}
+            {[
+              ['top-left', { top: -8, left: -8, cursor: 'nwse-resize' }],
+              ['top', { top: -8, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' }],
+              ['top-right', { top: -8, right: -8, cursor: 'nesw-resize' }],
+              ['right', { top: '50%', right: -8, transform: 'translateY(-50%)', cursor: 'ew-resize' }],
+              ['bottom-right', { bottom: -8, right: -8, cursor: 'nwse-resize' }],
+              ['bottom', { bottom: -8, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' }],
+              ['bottom-left', { bottom: -8, left: -8, cursor: 'nesw-resize' }],
+              ['left', { top: '50%', left: -8, transform: 'translateY(-50%)', cursor: 'ew-resize' }],
+            ].map(([handle, style]) => (
+              <div
+                key={handle}
+                onMouseDown={e => onResizeHandleMouseDown(e, handle)}
+                style={{
+                  position: 'absolute',
+                  width: 18,
+                  height: 18,
+                  background: darkMode ? '#0ea5e9' : '#2563eb',
+                  border: '2px solid #fff',
+                  borderRadius: 6,
+                  zIndex: 1000,
+                  ...style,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px #0ea5e944',
+                  cursor: style.cursor,
+                  userSelect: 'none',
+                }}
+                title={`Resize (${handle.replace('-', ' ')})`}
+              >
+                {/* Optional: Add a visual icon or dot */}
+                <div style={{ width: 8, height: 8, borderRadius: 4, background: '#fff', opacity: 0.8 }} />
+              </div>
+            ))}
             {/* Modal scale wrapper */}
             <div style={{ width: '100%', height: '100%', transform: `scale(${modalScale})`, transformOrigin: 'top left' }}>
             {/* Custom resize handle (bottom-right corner) */}
@@ -1834,38 +2248,38 @@ const LiveTradeViewPage = () => {
               >
                 {allRegularChecked ? 'Uncheck All Regular' : 'Check All Regular'}
               </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 8, background: '#222', color: '#fff', padding: 8, border: '2px solid #fbbf24', borderRadius: 8 }}>
                   <span style={{ fontWeight: 500, marginRight: 4 }}>Intervals:</span>
-                {masterIntervals.map(interval => (
+                  {masterIntervals.map(interval => (
                     <label key={interval} style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 36 }}>
-                    <input
-                      type="checkbox"
-                      checked={intervalMasterChecked[interval] || false}
-                      onChange={e => {
-                        const checked = e.target.checked;
-                        setIntervalMasterChecked({
-                          ...intervalMasterChecked,
-                          [interval]: checked
-                        });
-                        setActiveJsonLabels(prev => {
-                          const updated = { ...prev };
-                          apiJsonLabels.forEach(parent => {
-                              if (parent.intervals.some(i => i.interval === interval && i.exists)) {
-                              updated[parent.value] = {
-                                ...updated[parent.value],
-                                [interval]: checked
-                              };
-                            }
+                      <input
+                        type="checkbox"
+                        checked={intervalMasterChecked[interval] || false}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setIntervalMasterChecked({
+                            ...intervalMasterChecked,
+                            [interval]: checked
                           });
-                          return updated;
-                        });
-                      }}
+                          setActiveJsonLabels(prev => {
+                            const updated = { ...prev };
+                            apiJsonLabels.forEach(parent => {
+                              if (parent.intervals.some(i => i.interval === interval && i.exists)) {
+                                updated[parent.value] = {
+                                  ...updated[parent.value],
+                                  [interval]: checked
+                                };
+                              }
+                            });
+                            return updated;
+                          });
+                        }}
                         style={{ transform: 'scale(1.05)' }}
-                    />
+                      />
                       <span style={{ fontSize: 13 }}>{interval}</span>
-                  </label>
-                ))}
-          </div>
+                    </label>
+                  ))}
+                </div>
                 {/* Save button in settings modal header */}
                 <button
                   onClick={handleSaveSettings}
@@ -2046,9 +2460,9 @@ const LiveTradeViewPage = () => {
             {/* Left side info */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
             <span>📊</span>
-              <span>Rows: {filteredLogs.length} of {totalLogs}</span>
+              <span>Rows: {wholeLogs.length > 0 ? wholeLogs.length : filteredLogs.length} of {wholeLogs.length > 0 ? wholeTotalLogs : totalLogs}</span>
               <span>•</span>
-              <span>Page: {currentPage} of {totalPages}</span>
+              <span>Page: {wholeLogs.length > 0 ? wholeCurrentPage : currentPage} of {wholeLogs.length > 0 ? wholeTotalPages : totalPages}</span>
             <span>•</span>
             <span>Columns: {commonColumnOptions.length + apiJsonLabels.reduce((acc, parent) => acc + (parent.intervals?.length || 0), 0) + tradeDataColumnOptions.length}</span>
               
@@ -2069,12 +2483,30 @@ const LiveTradeViewPage = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
                   <span style={{ opacity: 0.7 }}>Time Range:</span>
                   <span style={{ fontWeight: 600, color: darkMode ? '#0ea5e9' : '#0d9488' }}>
-                    {filteredLogs[0]?.Candle_Time ? formatDate(filteredLogs[0].Candle_Time) : 'N/A'}
+                    {filteredLogs[0]?.candle_time ? formatDate(filteredLogs[0].candle_time) : 'N/A'}
                   </span>
                   <span>to</span>
                   <span style={{ fontWeight: 600, color: darkMode ? '#0ea5e9' : '#0d9488' }}>
-                    {filteredLogs[filteredLogs.length - 1]?.Candle_Time ? formatDate(filteredLogs[filteredLogs.length - 1].Candle_Time) : 'N/A'}
+                    {filteredLogs[filteredLogs.length - 1]?.candle_time ? formatDate(filteredLogs[filteredLogs.length - 1].candle_time) : 'N/A'}
                   </span>
+                  <button
+                    onClick={handleExportToExcel}
+                    style={{
+                      marginLeft: 16,
+                      padding: '6px 12px',
+                      borderRadius: 4,
+                      border: 'none',
+                      fontWeight: 600,
+                      fontSize: 12,
+                      background: '#22c55e',
+                      color: '#fff',
+                      boxShadow: '0 2px 4px #22c55e44',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    Export to Excel
+                  </button>
                 </div>
               )}
             </div>
@@ -2133,7 +2565,7 @@ const LiveTradeViewPage = () => {
               </div>
 
               {/* Pagination Controls */}
-              {totalPages > 1 && (
+              {(wholeLogs.length > 0 ? wholeTotalPages : totalPages) > 1 && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -2161,57 +2593,57 @@ const LiveTradeViewPage = () => {
                     First
                   </button>
                   <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
+                    onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeCurrentPage - 1) : handlePageChange(currentPage - 1))}
+                    disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1}
                     style={{
                       padding: '4px 8px',
                       borderRadius: 4,
                       border: '1px solid #888',
                       fontWeight: 600,
                       fontSize: 11,
-                      background: currentPage === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                      color: currentPage === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                      cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                      opacity: currentPage === 1 ? 0.5 : 1,
+                      background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                      color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                      cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 'not-allowed' : 'pointer',
+                      opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 0.5 : 1,
                     }}
                   >
                     ←
                   </button>
                   
                   <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#222', fontSize: 12 }}>
-                    {currentPage}/{totalPages}
+                    {(wholeLogs.length > 0 ? wholeCurrentPage : currentPage)}/{(wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                   </span>
                   
                   <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
+                    onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeCurrentPage + 1) : handlePageChange(currentPage + 1))}
+                    disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                     style={{
                       padding: '4px 8px',
                       borderRadius: 4,
                       border: '1px solid #888',
                       fontWeight: 600,
                       fontSize: 11,
-                      background: currentPage === totalPages ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                      color: currentPage === totalPages ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                      cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                      opacity: currentPage === totalPages ? 0.5 : 1,
+                      background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                      color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                      cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 'not-allowed' : 'pointer',
+                      opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 0.5 : 1,
                     }}
                   >
                     →
                   </button>
                   <button
-                    onClick={() => handlePageChange(totalPages)}
-                    disabled={currentPage === totalPages}
+                    onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeTotalPages) : handlePageChange(totalPages))}
+                    disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                     style={{
                       padding: '4px 8px',
                       borderRadius: 4,
                       border: '1px solid #888',
                       fontWeight: 600,
                       fontSize: 11,
-                      background: currentPage === totalPages ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                      color: currentPage === totalPages ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                      cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                      opacity: currentPage === totalPages ? 0.5 : 1,
+                      background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                      color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                      cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 'not-allowed' : 'pointer',
+                      opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 0.5 : 1,
                     }}
                   >
                     Last
@@ -2290,13 +2722,47 @@ const LiveTradeViewPage = () => {
             position: isSticky ? 'sticky' : undefined,
             left: isSticky ? (parentIdx === 0 ? 0 : 120) : undefined,
             zIndex: isSticky ? 40 : undefined,
-          }} title={item.label}
-                          onClick={() => handleHeaderClick('regular', item.value)}>
+          }} title={item.label}>
                           <div className="flex items-center justify-between">
+                            {/* Whole data sort button (left) */}
+                            <button
+                              onClick={() => handleWholeSort('regular', item.value)}
+                              style={{
+                                marginRight: 4,
+                                background: 'none',
+                                border: 'none',
+                                color: wholeSortKey === item.value ? (wholeSortDirection === 'asc' ? '#22c55e' : '#ef4444') : '#888',
+                                fontWeight: 700,
+                                fontSize: 14,
+                                cursor: 'pointer',
+                                padding: '0 2px',
+                                borderRadius: 3,
+                                outline: 'none',
+                              }}
+                              title={`Sort by ${item.label} (whole data)`}
+                            >
+                              w{wholeSortKey === item.value ? (wholeSortDirection === 'asc' ? '↑' : '↓') : ''}
+                            </button>
                             <span>{item.label}</span>
-                            <span className="ml-1 opacity-60">
-                              {sortKey && sortKey.type === 'regular' && sortKey.key === item.value ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                            </span>
+                            {/* Table sort button (right) */}
+                            <button
+                              onClick={() => handleHeaderClick('regular', item.value)}
+                              style={{
+                                marginLeft: 4,
+                                background: 'none',
+                                border: 'none',
+                                color: sortKey && sortKey.type === 'regular' && sortKey.key === item.value ? (sortDirection === 'asc' ? '#22c55e' : '#ef4444') : '#888',
+                                fontWeight: 700,
+                                fontSize: 14,
+                                cursor: 'pointer',
+                                padding: '0 2px',
+                                borderRadius: 3,
+                                outline: 'none',
+                              }}
+                              title={`Sort by ${item.label} (table only)`}
+                            >
+                              t{sortKey && sortKey.type === 'regular' && sortKey.key === item.value ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                            </button>
                           </div>
                         </th>
                       );
@@ -2365,41 +2831,34 @@ const LiveTradeViewPage = () => {
               </thead>
               <tbody>
                 {(() => {
-                  const sortedRows = getSortedRows(filteredLogs);
+                  // Use wholeLogs if available, otherwise use filteredLogs
+                  const currentData = wholeLogs.length > 0 ? wholeLogs : filteredLogs;
+                  const sortedRows = getSortedRows(currentData);
   
   // TEMP DEBUG: Show filtered logs and sorting info
-  console.log('🔍 DEBUG TABLE RENDERING:');
-  console.log('📊 Original logs length:', logs.length);
-  console.log('🔧 Filtered logs length:', filteredLogs.length);
-  console.log('📋 Sorted rows length:', sortedRows.length);
-  console.log('🏷️ Active regular labels:', activeRegularLabels);
-  console.log('📄 Active JSON labels:', activeJsonLabels);
-  console.log('📝 First filtered log:', filteredLogs[0]);
-  console.log('📝 First sorted row:', sortedRows[0]);
+
   
   // Check if filtering is removing all logs
-  if (logs.length > 0 && filteredLogs.length === 0) {
-    console.error('❌ ISSUE: All logs filtered out!');
-    console.log('🔍 Filter conditions that might be causing this:');
-    console.log('- Selected signals:', selectedSignals);
-    console.log('- Selected machines:', selectedMachines);
-    console.log('- Selected actions:', selectedActions);
-    console.log('- Selected candle types:', selectedCandleTypes);
-  }
+
 
                   return sortedRows.map((row, idx) => {
-                    let json = {};
-                    try {
-                      if (typeof row.json_data === 'string') {
-                        let raw = row.json_data.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
-                        json = JSON.parse(raw);
-                      } else {
-                        json = row.json_data || {};
-                      }
-                    } catch { json = {}; }
+                    // Use parsed_json_message first, fallback to json_data
+                    let json = null;
+                    if (row.parsed_json_message && typeof row.parsed_json_message === 'object') {
+                      json = row.parsed_json_message;
+                    } else if (row.json_data) {
+                      try {
+                        if (typeof row.json_data === 'string') {
+                          let raw = row.json_data.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
+                          json = JSON.parse(raw);
+                        } else {
+                          json = row.json_data;
+                        }
+                      } catch { json = {}; }
+                    }
                     const allRows = json?.signal_data?.all_last_rows || {};
                     // Determine unique key for row selection
-                    const rowKey = row.Unique_id != null ? row.Unique_id : idx;
+                    const rowKey = row.unique_id != null ? row.unique_id : idx;
                     const isSelected = selectedRow === rowKey;
                     return (
                       <tr key={idx} className="cursor-pointer" style={{
@@ -2541,7 +3000,7 @@ const LiveTradeViewPage = () => {
           </div>
             
             {/* Bottom Pagination Controls */}
-            {totalPages > 1 && (
+            {(wholeLogs.length > 0 ? wholeTotalPages : totalPages) > 1 && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2554,74 +3013,74 @@ const LiveTradeViewPage = () => {
                 border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb',
               }}>
                 <button
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
+                  onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(1) : handlePageChange(1))}
+                  disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 6,
                     border: '1px solid #888',
                     fontWeight: 600,
                     fontSize: 14,
-                    background: currentPage === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                    color: currentPage === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1,
+                    background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                    color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                    cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 'not-allowed' : 'pointer',
+                    opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 0.5 : 1,
                   }}
                 >
                   First
                 </button>
                 <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
+                  onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeCurrentPage - 1) : handlePageChange(currentPage - 1))}
+                  disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 6,
                     border: '1px solid #888',
                     fontWeight: 600,
                     fontSize: 14,
-                    background: currentPage === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                    color: currentPage === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1,
+                    background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                    color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                    cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 'not-allowed' : 'pointer',
+                    opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === 1 ? 0.5 : 1,
                   }}
                 >
                   Previous
                 </button>
                 
                 <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#222' }}>
-                  Page {currentPage} of {totalPages}
+                  Page {(wholeLogs.length > 0 ? wholeCurrentPage : currentPage)} of {(wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                 </span>
                 
                 <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
+                  onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeCurrentPage + 1) : handlePageChange(currentPage + 1))}
+                  disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 6,
                     border: '1px solid #888',
                     fontWeight: 600,
                     fontSize: 14,
-                    background: currentPage === totalPages ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                    color: currentPage === totalPages ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === totalPages ? 0.5 : 1,
+                    background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                    color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                    cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 'not-allowed' : 'pointer',
+                    opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 0.5 : 1,
                   }}
                 >
                   Next
                 </button>
                 <button
-                  onClick={() => handlePageChange(totalPages)}
-                  disabled={currentPage === totalPages}
+                  onClick={() => (wholeLogs.length > 0 ? handleWholePageChange(wholeTotalPages) : handlePageChange(totalPages))}
+                  disabled={(wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages)}
                   style={{
                     padding: '8px 12px',
                     borderRadius: 6,
                     border: '1px solid #888',
                     fontWeight: 600,
                     fontSize: 14,
-                    background: currentPage === totalPages ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
-                    color: currentPage === totalPages ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === totalPages ? 0.5 : 1,
+                    background: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#334155' : '#e5e7eb') : (darkMode ? '#0ea5e9' : '#0d9488'),
+                    color: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? (darkMode ? '#6b7280' : '#9ca3af') : '#fff',
+                    cursor: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 'not-allowed' : 'pointer',
+                    opacity: (wholeLogs.length > 0 ? wholeCurrentPage : currentPage) === (wholeLogs.length > 0 ? wholeTotalPages : totalPages) ? 0.5 : 1,
                   }}
                 >
                   Last

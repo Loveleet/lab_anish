@@ -15,6 +15,14 @@ import ReportDashboard from './components/ReportDashboard';
 import ListViewPage from './components/ListViewPage';
 import LiveTradeViewPage from './components/LiveTradeViewPage';
 import GroupViewPage from './pages/GroupViewPage';
+import RefreshControls from './components/RefreshControls';
+import SuperTrendPanel from "./SuperTrendPanel";
+
+// Helper to get API base URL
+const API_BASE_URL =
+  import.meta.env.MODE === "production"
+    ? "https://lab-code-5v36.onrender.com"
+    : "";
 
 // Animated SVG background for LAB title
 function AnimatedGraphBackground({ width = 400, height = 80, opacity = 0.4 }) {
@@ -83,7 +91,34 @@ const displayInterval = (interval) =>
     ? "1d"
     : `${interval}m`;
 
+// Helper functions for consistent data parsing
+const parseHedge = (hedgeValue) => {
+  if (hedgeValue === true || hedgeValue === "true" || hedgeValue === 1 || hedgeValue === "1") return true;
+  if (hedgeValue === false || hedgeValue === "false" || hedgeValue === 0 || hedgeValue === "0" || 
+      hedgeValue === null || hedgeValue === undefined) return false;
+  if (typeof hedgeValue === 'string') {
+    const numValue = parseFloat(hedgeValue);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
+
+const parseBoolean = (value) => {
+  if (value === true || value === "true" || value === 1 || value === "1") return true;
+  if (typeof value === 'string') {
+    const numValue = parseFloat(value);
+    return !isNaN(numValue) && numValue > 0;
+  }
+  return false;
+};
+
 const App = () => {
+  const [superTrendData, setSuperTrendData] = useState([]);
+  const [emaTrends, setEmaTrends] = useState(null);
+  // Expose superTrendData for focused debugging (must be at top level, not inside render logic)
+  useEffect(() => {
+    window._superTrendData = superTrendData;
+  }, [superTrendData]);
   const [metrics, setMetrics] = useState(null);
   const [selectedBox, setSelectedBox] = useState(null);
   const [tradeData, setTradeData] = useState([]);
@@ -92,7 +127,10 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [machines, setMachines] = useState([]);
   const [signalRadioMode, setSignalRadioMode] = useState(false);
-  const [machineRadioMode, setMachineRadioMode] = useState(false);
+  const [machineRadioMode, setMachineRadioMode] = useState(() => {
+    const saved = localStorage.getItem("machineRadioMode");
+    return saved ? JSON.parse(saved) : false;
+  });
   const [includeMinClose, setIncludeMinClose] = useState(true);
   const [activeSubReport, setActiveSubReport] = useState("running");
   const [fontSizeLevel, setFontSizeLevel] = useState(() => {
@@ -128,6 +166,7 @@ const App = () => {
     localStorage.setItem("fontSizeLevel", fontSizeLevel);
   }, [fontSizeLevel]);
 
+
   const [layoutOption, setLayoutOption] = useState(() => {
     const saved = localStorage.getItem("layoutOption");
     return saved ? parseInt(saved, 10) : 3;
@@ -141,7 +180,18 @@ const App = () => {
     }
     return true; // Default
   });
-  const [machineToggleAll, setMachineToggleAll] = useState(true);
+  const [machineToggleAll, setMachineToggleAll] = useState(() => {
+    const saved = localStorage.getItem("machineToggleAll");
+    return saved ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("machineRadioMode", machineRadioMode);
+  }, [machineRadioMode]);
+
+  useEffect(() => {
+    localStorage.setItem("machineToggleAll", machineToggleAll);
+  }, [machineToggleAll]);
   
   // ChartGrid state
   const [showChartGrid, setShowChartGrid] = useState(false);
@@ -160,12 +210,16 @@ const [toDate, setToDate] = useState(() => {
 useEffect(() => {
   if (fromDate) {
     localStorage.setItem("fromDate", fromDate.toISOString());
+  } else {
+    localStorage.removeItem("fromDate");
   }
 }, [fromDate]);
 
 useEffect(() => {
   if (toDate) {
     localStorage.setItem("toDate", toDate.toISOString());
+  } else {
+    localStorage.removeItem("toDate");
   }
 }, [toDate]);
 
@@ -212,66 +266,72 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
   const [selectedMachines, setSelectedMachines] = useState({});
   const [dateKey, setDateKey] = useState(0);
   
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const tradeRes = await fetch("https://lab-code-1.onrender.com/api/trades");
-        const tradeJson = tradeRes.ok ? await tradeRes.json() : { trades: [] };
-        const trades = Array.isArray(tradeJson.trades) ? tradeJson.trades : [];
-        // console.log('[App.jsx] Fetched trades from API:', trades);
 
-        const machinesRes = await fetch("https://lab-code-1.onrender.com/api/machines");
-        const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
-        const machinesList = Array.isArray(machinesJson.machines) ? machinesJson.machines : [];
+  const refreshAllData = useCallback(async () => {
+    try {
+      const tradeRes = await fetch(`${API_BASE_URL}/api/trades`);
+      const tradeJson = tradeRes.ok ? await tradeRes.json() : { trades: [] };
+      const trades = Array.isArray(tradeJson.trades) ? tradeJson.trades : [];
 
-        const logRes = await fetch("/logs.json");
-        const logJson = logRes.ok ? await logRes.json() : { logs: [] };
-        const logs = Array.isArray(logJson.logs) ? logJson.logs : [];
+      const machinesRes = await fetch(`${API_BASE_URL}/api/machines`);
+      const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
+      const machinesList = Array.isArray(machinesJson.machines) ? machinesJson.machines : [];
 
-        setMachines(machinesList);
-        setTradeData(trades);
-        setLogData(logs);
+      const logRes = await fetch("/logs.json");
+      const logJson = logRes.ok ? await logRes.json() : { logs: [] };
+      const logs = Array.isArray(logJson.logs) ? logJson.logs : [];
 
-        setClientData(machinesList);
+      // Fetch SuperTrend data
+      const superTrendRes = await fetch(`${API_BASE_URL}/api/supertrend`);
+      const superTrendJson = superTrendRes.ok ? await superTrendRes.json() : { supertrend: [] };
+      setSuperTrendData(Array.isArray(superTrendJson.supertrend) ? superTrendJson.supertrend : []);
 
-        if (Object.keys(selectedMachines).length === 0) {
-          const savedMachines = localStorage.getItem("selectedMachines");
-          if (savedMachines) {
-            setSelectedMachines(JSON.parse(savedMachines)); // ✅ Load from storage first
-          } else {
-            const activeMachines = machinesList.reduce((acc, machine) => {
-              if (machine.Active) acc[machine.MachineId] = true;
-              return acc;
-            }, {});
-            setSelectedMachines(activeMachines);
-            localStorage.setItem("selectedMachines", JSON.stringify(activeMachines)); // ✅ Save to prevent resets
-          }
+      // Fetch EMA trend data
+      const emaRes = await fetch(`${API_BASE_URL}/api/pairstatus`);
+      const emaJson = emaRes.ok ? await emaRes.json() : null;
+      setEmaTrends(emaJson);
+
+      setMachines(machinesList);
+      setTradeData(trades);
+      setLogData(logs);
+      setClientData(machinesList);
+
+      if (Object.keys(selectedMachines).length === 0) {
+        const savedMachines = localStorage.getItem("selectedMachines");
+        if (savedMachines) {
+          setSelectedMachines(JSON.parse(savedMachines));
+        } else {
+          const activeMachines = machinesList.reduce((acc, machine) => {
+            if (machine.active) acc[machine.machineid] = true;
+            return acc;
+          }, {});
+          setSelectedMachines(activeMachines);
+          localStorage.setItem("selectedMachines", JSON.stringify(activeMachines));
         }
-      } catch (error) {
-        console.error("❌ Error fetching data:", error);
-        setTradeData([]);
       }
-    };
+    } catch (error) {
+      setTradeData([]);
+    }
+  }, [selectedMachines]);
 
-    fetchData();
-    const interval = setInterval(fetchData, 20000); // ✅ Fetch every 20 seconds
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => {
+    refreshAllData();
+  }, [refreshAllData]);
 const filteredTradeData = useMemo(() => {
   if (!Array.isArray(tradeData)) return [];
  
   return tradeData.filter(trade => {
 
-    if (!includeMinClose && trade.Min_close === "Min_close") return false;
-    const isSignalSelected = selectedSignals[trade.SignalFrom];
-    const isMachineSelected = selectedMachines[trade.MachineId];
-    const isIntervalSelected = selectedIntervals[trade.Interval];
-    const isActionSelected = selectedActions[trade.Action];
+    if (!includeMinClose && trade.min_close === "Min_close") return false;
+    const isSignalSelected = selectedSignals[trade.signalfrom];
+    const isMachineSelected = selectedMachines[trade.machineid];
+    const isIntervalSelected = selectedIntervals[trade.interval];
+    const isActionSelected = selectedActions[trade.action];
 
     // ✅ Handle missing or malformed Candle time
-    if (!trade.Candel_time) return false;
+    if (!trade.candel_time) return false;
 
-    const tradeTime = moment(trade.Candel_time); // ⏳ Parse to moment
+    const tradeTime = moment(trade.candel_time); // ⏳ Parse to moment
 
     // ✅ Check if within selected date & time range
     const isDateInRange = (!fromDate || tradeTime.isSameOrAfter(fromDate)) &&
@@ -285,6 +345,7 @@ const filteredTradeData = useMemo(() => {
 const getFilteredForTitle = useMemo(() => {
   const memo = {};
 
+
   (filteredTradeData || []).forEach((trade) => {
     const pushTo = (key) => {
       if (!memo[key]) memo[key] = [];
@@ -293,147 +354,239 @@ const getFilteredForTitle = useMemo(() => {
 
     pushTo("Total_Trades");
 
-    if (trade.Type === "close") pushTo("Profit_+_Loss_=_Closed_Profit $");
-    if (trade.Type === "running") pushTo("Profit_+_Loss_=_Running_Profit $");
-    if (["assign", "running", "close"].includes(trade.Type)) pushTo("Assign_/_Running_/_Closed Count");
+    if (trade.type === "close") pushTo("Profit_+_Loss_=_Closed_Profit $");
+    if (trade.type === "running" || trade.type === "hedge_hold") pushTo("Profit_+_Loss_=_Running_Profit $");
+    if (["assign", "running", "close", "hedge_hold"].includes(trade.type)) pushTo("Assign_/_Running_/_Closed Count");
 
-    if (trade.Action === "BUY" && trade.Type === "running") {
+    if (trade.action === "BUY" && (trade.type === "running" || trade.type === "hedge_hold")) {
       pushTo("Running_/_Total_Buy");
     }
 
-    if (trade.Action === "SELL" && trade.Type === "running") {
+    if (trade.action === "SELL" && (trade.type === "running" || trade.type === "hedge_hold")) {
       pushTo("Running_/_Total_Sell");
     }
 
-    if (trade.Commision_journey && trade.Pl_after_comm > 0 && trade.Profit_journey === false && trade.Type === "running" ) pushTo("Comission_Point_Crossed");
-    if (trade.Profit_journey && trade.Pl_after_comm > 0 && trade.Type === "running"  ) pushTo("Profit_Journey_Crossed");
-    if (trade.Pl_after_comm < 0 && trade.Type === "running" ) pushTo("Below_Commision_Point");
+    const isHedge = parseHedge(trade.hedge);
+    const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+    const isCommisionJourney = parseBoolean(trade.commision_journey);
+    const isProfitJourney = parseBoolean(trade.profit_journey);
+    
+    if (isCommisionJourney && trade.pl_after_comm > 0 && !isProfitJourney && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Comission_Point_Crossed");
+    if (isProfitJourney && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Profit_Journey_Crossed");
+    if (trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Below_Commision_Point");
 
-    if (trade.Type === "close" && trade.Commision_journey && !trade.Profit_journey) pushTo("Closed_After_Comission_Point");
-    if (trade.Type === "close" && trade.Pl_after_comm < 0) pushTo("Close_in_Loss");
-    if (trade.Hedge) pushTo("Total_Hedge");
-    if (trade.Hedge && trade.Type === "running") pushTo("Hedge_Running_pl");
-    if (trade.Hedge && trade.Type === "close") pushTo("Hedge_Closed_pl");
+    if (trade.type === "close" && isCommisionJourney && !isProfitJourney) pushTo("Closed_After_Comission_Point");
+    if (trade.type === "close" && trade.pl_after_comm < 0) pushTo("Close_in_Loss");
+    if (isHedge) pushTo("Total_Hedge");
+    if (isHedge && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Hedge_Running_pl");
+    if (isHedge && trade.type === "close") pushTo("Hedge_Closed_pl");
 
-    if (trade.Type === "close" && trade.Pl_after_comm > 0) pushTo("Close_in_Profit");
-    if (trade.Type === "close" && trade.Profit_journey) pushTo("Close_After_Profit_Journey");
-    if (trade.Type === "close" && trade.Commision_journey && trade.Pl_after_comm < 0) pushTo("Close_Curve_in_Loss");
+    if (trade.type === "close" && trade.pl_after_comm > 0) pushTo("Close_in_Profit");
+    if (trade.type === "close" && isProfitJourney) pushTo("Close_After_Profit_Journey");
+    if (trade.type === "close" && isCommisionJourney && trade.pl_after_comm < 0) pushTo("Close_Curve_in_Loss");
 
-    if (trade.Type === "close" && trade.Min_close === "Min_close") {
-      if (trade.Pl_after_comm > 0) pushTo("Min_Close_Profit");
-      if (trade.Pl_after_comm < 0) pushTo("Min_Close_Loss");
+    if (trade.type === "close" && trade.min_close === "Min_close") {
+      if (trade.pl_after_comm > 0) pushTo("Min_Close_Profit");
+      if (trade.pl_after_comm < 0) pushTo("Min_Close_Loss");
     }
 
-    pushTo("Total_Closed_Stats");
-    pushTo("Direct_Closed_Stats");
-    pushTo("Hedge_Closed_Stats");
-    pushTo("Total_Running_Stats");
-    pushTo("Direct_Running_Stats");
-    pushTo("Hedge_Running_Stats");
-    pushTo("Hedge_on_Hold");
+    // Closed Stats
+    if (trade.type === "close") {
+      pushTo("Total_Closed_Stats");
+      pushTo("Closed_Count_Stats");
+      
+      if (!isHedge) pushTo("Direct_Closed_Stats");
+    }
+    
+    // Hedge Closed Stats - use hedge_close type
+    if (trade.type === "hedge_close") {
+      pushTo("Hedge_Closed_Stats");
+    }
+    
+    // Running Stats
+    if (trade.type === "running" || trade.type === "hedge_hold") {
+      pushTo("Total_Running_Stats");
+      
+      if (!isHedge) {
+        pushTo("Direct_Running_Stats");
+      }
+      if (isHedge && !isHedge11) {
+        pushTo("Hedge_Running_Stats");
+      }
+    }
+    
+    // Hedge on Hold (trades that are hedge and running)
+    if (isHedge && isHedge11 && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Hedge_on_Hold");
+    
+    // Total Stats (all trades)
     pushTo("Total_Stats");
-    pushTo("Closed_Count_Stats");
-    pushTo("Assigned_New");
+    
+    // Only add to Assigned_New if it's actually an assigned trade
+    if (trade.type === "assign") pushTo("Assigned_New");
     
 
 
 
-    if (trade.Hedge === true) pushTo("Hedge_Stats");
+    if (isHedge) pushTo("Hedge_Stats");
 
     // --- ADD: Buy_Sell_Stats logic
-    if (["BUY", "SELL"].includes(trade.Action)) pushTo("Buy_Sell_Stats");
+    if (["BUY", "SELL"].includes(trade.action)) pushTo("Buy_Sell_Stats");
 
     // --- ADD: Journey_Stats logic (fix missing)
-    if (trade.Type === "running" && trade.Pl_after_comm > 0 && trade.Profit_journey === true) pushTo("Journey_Stats_Running");
-    if (trade.Type === "running" && trade.Pl_after_comm > 0 && trade.Commision_journey === true && !trade.Profit_journey) pushTo("Journey_Stats_Running");
-    if (trade.Type === "running" && trade.Pl_after_comm < 0) pushTo("Journey_Stats_Running");
+    if ((trade.type === "running" || trade.type === "hedge_hold") && trade.pl_after_comm > 0 && isProfitJourney) pushTo("Journey_Stats_Running");
+    if ((trade.type === "running" || trade.type === "hedge_hold") && trade.pl_after_comm > 0 && isCommisionJourney && !isProfitJourney) pushTo("Journey_Stats_Running");
+    if ((trade.type === "running" || trade.type === "hedge_hold") && trade.pl_after_comm < 0) pushTo("Journey_Stats_Running");
   });
 
+  
   return memo;
 }, [filteredTradeData]);
 
 useEffect(() => {
   // 🔹 Total Investment Calculation
-  const totalInvestment = filteredTradeData.reduce((sum, trade) => sum + (trade.Investment || 0), 0);
+  const totalInvestment = filteredTradeData.reduce((sum, trade) => sum + (trade.investment || 0), 0);
   let investmentAvailable = 50000 - totalInvestment;
   investmentAvailable = investmentAvailable < 0 ? 0 : investmentAvailable; // ✅ Prevent negative values
 
   const closePlus = filteredTradeData
-    .filter(trade => trade.Pl_after_comm > 0 && trade.Type === "close" ) // ✅ Correct field reference
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+    .filter(trade => trade.pl_after_comm > 0 && trade.type === "close" ) // ✅ Correct field reference
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const closeMinus = filteredTradeData
-    .filter(trade => trade.Pl_after_comm < 0 && trade.Type === "close"  ) // ✅ Correct field reference
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
-  const runningPlus = filteredTradeData
-    .filter(trade => trade.Pl_after_comm > 0 && trade.Type === "running" && trade.Hedge === false) // ✅ Correct field reference
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
-  const runningMinus = filteredTradeData
-    .filter(trade => trade.Pl_after_comm < 0 && trade.Type === "running" && trade.Hedge === false) // ✅ Correct field reference
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
-  const closedProfit = filteredTradeData
-      .filter(trade => trade.Type === "close")
-      .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
-  const runningProfit = filteredTradeData
-  .filter(trade => trade.Hedge === false && trade.Type === "running")
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+    .filter(trade => trade.pl_after_comm < 0 && trade.type === "close"  ) // ✅ Correct field reference
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+  const runningPlusFiltered = filteredTradeData
+    .filter(trade => {
+      const isHedge = parseHedge(trade.hedge);
+      return trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+    });
+  const runningMinusFiltered = filteredTradeData
+    .filter(trade => {
+      const isHedge = parseHedge(trade.hedge);
+      return trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+    });
 
-  const buyRunningDirect = filteredTradeData.filter(t => t.Action === "BUY" && t.Type === "running" && t.Hedge === false).length;
-  const buyRunningHedge = filteredTradeData.filter(t => t.Action === "BUY" && t.Type === "running" && t.Hedge === true).length;
-  const buyRunningCloseD = filteredTradeData.filter(t => t.Action === "BUY" && t.Type === "close").length ;
-  const buyRunningCloseH = filteredTradeData.filter(t => t.Action === "BUY" && t.Type === "hedge_close").length ;
+  const runningPlus = runningPlusFiltered.reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+  const runningMinus = runningMinusFiltered.reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+  const closedProfit = filteredTradeData
+      .filter(trade => trade.type === "close")
+      .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+  const runningProfit = filteredTradeData
+  .filter(trade => {
+    const isHedge = parseHedge(trade.hedge);
+    return !isHedge && (trade.type === "running" || trade.type === "hedge_hold");
+  })
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+
+  const buyRunningDirect = filteredTradeData.filter(t => {
+    const isHedge = parseHedge(t.hedge);
+    return t.action === "BUY" && (t.type === "running" || t.type === "hedge_hold") && !isHedge;
+  }).length;
+  const buyRunningHedge = filteredTradeData.filter(t => {
+    const isHedge = parseHedge(t.hedge);
+    return t.action === "BUY" && (t.type === "running" || t.type === "hedge_hold") && isHedge;
+  }).length;
+  const buyRunningCloseD = filteredTradeData.filter(t => t.action === "BUY" && t.type === "close").length ;
+  const buyRunningCloseH = filteredTradeData.filter(t => t.action === "BUY" && t.type === "hedge_close").length ;
   const buyRunningClose = buyRunningCloseD + buyRunningCloseH;
 
 
-  const buyTotal = filteredTradeData.filter(t => t.Action === "BUY").length;
-  const sellRunningDirect = filteredTradeData.filter(t => t.Action === "SELL" && t.Type === "running" && t.Hedge === false).length;
-  const sellRunningHedge = filteredTradeData.filter(t => t.Action === "SELL" && t.Type === "running" && t.Hedge === true).length;
-  const sellRunningCloseD = filteredTradeData.filter(t => t.Action === "SELL" && t.Type === "close" ).length;
-  const sellRunningCloseH = filteredTradeData.filter(t => t.Action === "SELL" && t.Type === "hedge_close").length;
+  const buyTotal = filteredTradeData.filter(t => t.action === "BUY").length;
+  const sellRunningDirect = filteredTradeData.filter(t => {
+    const isHedge = parseHedge(t.hedge);
+    return t.action === "SELL" && (t.type === "running" || t.type === "hedge_hold") && !isHedge;
+  }).length;
+  const sellRunningHedge = filteredTradeData.filter(t => {
+    const isHedge = parseHedge(t.hedge);
+    return t.action === "SELL" && (t.type === "running" || t.type === "hedge_hold") && isHedge;
+  }).length;
+  const sellRunningCloseD = filteredTradeData.filter(t => t.action === "SELL" && t.type === "close" ).length;
+  const sellRunningCloseH = filteredTradeData.filter(t => t.action === "SELL" && t.type === "hedge_close").length;
   const sellRunningClose = sellRunningCloseD + sellRunningCloseH;
 
 
 
 
 
-  const sellTotal = filteredTradeData.filter(t => t.Action === "SELL").length;
+  const sellTotal = filteredTradeData.filter(t => t.action === "SELL").length;
 
   const hedgePlusRunning = filteredTradeData
-  .filter(trade => trade.Pl_after_comm > 0 && trade.Hedge === true && trade.Hedge_1_1_bool === true) // ✅ Correct field reference
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => {
+    const hedgeValue = trade.hedge || trade.Hedge || trade.hedge_bool || trade.Hedge_bool;
+    const hedge11Value = trade.hedge_1_1_bool || trade.Hedge_1_1_bool || trade.hedge_1_1 || trade.Hedge_1_1;
+    const plValue = trade.pl_after_comm || trade.Pl_after_comm;
+    
+    const isHedge = parseHedge(hedgeValue);
+    const isHedge11 = parseBoolean(hedge11Value);
+    return plValue > 0 && isHedge && isHedge11;
+  })
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm || trade.Pl_after_comm) || 0), 0);
   const hedgeMinusRunning = filteredTradeData
-    .filter(trade => trade.Pl_after_comm < 0 && trade.Hedge === true && trade.Hedge_1_1_bool === true)
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);   
+    .filter(trade => {
+      const hedgeValue = trade.hedge || trade.Hedge || trade.hedge_bool || trade.Hedge_bool;
+      const hedge11Value = trade.hedge_1_1_bool || trade.Hedge_1_1_bool || trade.hedge_1_1 || trade.Hedge_1_1;
+      const plValue = trade.pl_after_comm || trade.Pl_after_comm;
+      
+      const isHedge = parseHedge(hedgeValue);
+      const isHedge11 = parseBoolean(hedge11Value);
+      return plValue < 0 && isHedge && isHedge11;
+    })
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm || trade.Pl_after_comm) || 0), 0);   
   const hedgeRunningProfit = filteredTradeData
-      .filter(trade => trade.Type === "running" && trade.Hedge === true && trade.Hedge_1_1_bool === true)
-      .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+      .filter(trade => {
+        const hedgeValue = trade.hedge || trade.Hedge || trade.hedge_bool || trade.Hedge_bool;
+        const hedge11Value = trade.hedge_1_1_bool || trade.Hedge_1_1_bool || trade.hedge_1_1 || trade.Hedge_1_1;
+        const typeValue = trade.type || trade.Type || "";
+        
+        const isHedge = parseHedge(hedgeValue);
+        const isHedge11 = parseBoolean(hedge11Value);
+        
+        // Use same logic as count - not closed trades
+        const isNotClosed = !typeValue.toLowerCase().includes("close") && 
+                           !typeValue.toLowerCase().includes("assign");
+        
+        return isHedge && isHedge11 && isNotClosed;
+      })
+      .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm || trade.Pl_after_comm) || 0), 0);
 
   const hedgeActiveRunningPlus = filteredTradeData
-  .filter(trade => trade.Hedge === true && trade.Hedge_1_1_bool === false && trade.Pl_after_comm > 0 && trade.Type === "running")
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => {
+    const isHedge = parseHedge(trade.hedge);
+    const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+    return isHedge && !isHedge11 && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold");
+  })
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeActiveRunningMinus = filteredTradeData 
-  .filter(trade => trade.Hedge === true && trade.Hedge_1_1_bool === false && trade.Pl_after_comm < 0 && trade.Type === "running")
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => {
+    const isHedge = parseHedge(trade.hedge);
+    const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+    return isHedge && !isHedge11 && trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold");
+  })
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeActiveRunningTotal = filteredTradeData
-  .filter(trade => trade.Hedge === true && trade.Hedge_1_1_bool === false && trade.Type === "running")
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => {
+    const isHedge = parseHedge(trade.hedge);
+    const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+    return isHedge && !isHedge11 && (trade.type === "running" || trade.type === "hedge_hold");
+  })
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
 
   const hedgeClosedPlus = filteredTradeData
-  .filter(trade => trade.Type === "hedge_close" && trade.Pl_after_comm > 0)
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => trade.type === "hedge_close" && trade.pl_after_comm > 0)
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeClosedMinus = filteredTradeData
-  .filter(trade => trade.Type === "hedge_close" && trade.Pl_after_comm < 0)
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => trade.type === "hedge_close" && trade.pl_after_comm < 0)
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeClosedTotal = filteredTradeData
-  .filter(trade => trade.Type === "hedge_close"  )
-  .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0);
+  .filter(trade => trade.type === "hedge_close"  )
+  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   
   const minCloseProfitVlaue = filteredTradeData
-    .filter(trade => trade.Min_close === "Min_close"  &&  trade.Type === "close" && trade.Pl_after_comm > 0)
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0).toFixed(2)
+    .filter(trade => trade.min_close === "Min_close"  &&  trade.type === "close" && trade.pl_after_comm > 0)
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0).toFixed(2)
   
   const minCloseLossVlaue = filteredTradeData
-    .filter(trade => trade.Min_close === "Min_close"  &&  trade.Type === "close" && trade.Pl_after_comm < 0)
-    .reduce((sum, trade) => sum + (trade.Pl_after_comm || 0), 0).toFixed(2)
+    .filter(trade => trade.min_close === "Min_close"  &&  trade.type === "close" && trade.pl_after_comm < 0)
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0).toFixed(2)
 
    // console.log("🔍 Filtered Trade Data:", filteredTradeData);  
 
@@ -455,7 +608,7 @@ Total_Closed_Stats: (
              
              &nbsp;
                <span title="Closed Count" className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}>
-                {filteredTradeData.filter(trade => trade.Type === "close" || trade.Type === "hedge_close").length}
+                {filteredTradeData.filter(trade => trade.type === "close" || trade.type === "hedge_close").length}
               </span>
              
               <div style={{ height: '14px' }} />
@@ -482,7 +635,7 @@ Direct_Closed_Stats: (
                 &nbsp;
              
               <span title="Closed Count" className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}>
-                {filteredTradeData.filter(trade => trade.Type === "close" ).length}
+                {filteredTradeData.filter(trade => trade.type === "close" ).length}
               </span>
              
               <div style={{ height: '14px' }} />
@@ -513,7 +666,10 @@ Hedge_Closed_Stats: (
                 className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}
                 title="Closed Hedge Count"
               >
-                {filteredTradeData.filter(trade => trade.Hedge === true & trade.Type === "hedge_close").length}
+                {filteredTradeData.filter(trade => {
+                const isHedge = parseHedge(trade.hedge);
+                return isHedge && trade.type === "hedge_close";
+              }).length}
               </span>
              
               <div style={{ height: '14px' }} />
@@ -533,7 +689,10 @@ Total_Running_Stats: (
              &nbsp;
            
             <span title="Running Count (Hedge + Direct)" className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}>
-                {filteredTradeData.filter(trade => trade.Type === "running" & trade.Hedge_1_1_bool === false).length}
+                {filteredTradeData.filter(trade => {
+                const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+                return (trade.type === "running" || trade.type === "hedge_hold") && !isHedge11;
+              }).length}
               </span>
               
            
@@ -562,7 +721,10 @@ Total_Running_Stats: (
              <span title="Running Count (only Direct)" className={`relative px-[3px] text-yellow-300 font-semibold opacity-70 font-semibold`} style={{ fontSize: `${24 + (fontSizeLevel - 8) * 5}px` }}>👇</span>
             &nbsp;
             <span title="Running Count (only Direct)" className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}>
-                {filteredTradeData.filter(trade => trade.Type === "running" & trade.Hedge === false).length}
+                {filteredTradeData.filter(trade => {
+                  const isHedge = parseHedge(trade.hedge);
+                  return (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+                }).length}
               </span>
               
            <div style={{ height: '14px' }} />
@@ -593,7 +755,11 @@ Total_Running_Stats: (
                 className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}
                 title="Running Hedge Count"
               >
-                {filteredTradeData.filter(trade => trade.Hedge_1_1_bool === false & trade.Hedge === true & trade.Type === "running").length}
+                {filteredTradeData.filter(trade => {
+                  const isHedge = parseHedge(trade.hedge);
+                  const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
+                  return !isHedge11 && isHedge && (trade.type === "running" || trade.type === "hedge_hold");
+                }).length}
               </span>
 
               <div style={{ height: '14px' }} />
@@ -671,7 +837,48 @@ Total_Stats: (
                 className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}
                 title="Hedge 1-1 Count"
               >
-                {filteredTradeData.filter(trade => trade.Hedge === true & trade.Hedge_1_1_bool === true).length}
+                {(() => {
+                  const hedgeOnHoldTrades = filteredTradeData.filter(trade => {
+                    // Debug: check various possible field names for hedge
+                    const hedgeValue = trade.hedge || trade.Hedge || trade.hedge_bool || trade.Hedge_bool || trade.hedgebool || trade.HedgeBool;
+                    const hedge11Value = trade.hedge_1_1_bool || trade.Hedge_1_1_bool || trade.hedge_1_1 || trade.Hedge_1_1 || trade.hedge11bool || trade.Hedge11Bool;
+                    
+                    const isHedge = parseHedge(hedgeValue);
+                    const isHedge11 = parseBoolean(hedge11Value);
+                    const typeValue = trade.type || trade.Type || "";
+                    
+                    // Check for running trades - be more flexible with type matching
+                    const isRunning = typeValue === "running" || 
+                                     typeValue === "Running" || 
+                                     typeValue === "hedge_hold" ||
+                                     typeValue.toLowerCase().includes("running") ||
+                                     (!typeValue || typeValue === ""); // Include trades with no type as potentially running
+                    
+                    // Debug logging (only for first few trades to avoid spam)
+                    if (filteredTradeData.indexOf(trade) < 3) {
+                      console.log("🔍 Hedge Debug - Trade:", trade.unique_id, {
+                        hedgeValue,
+                        hedge11Value,
+                        isHedge,
+                        isHedge11,
+                        isRunning,
+                        typeValue,
+                        originalType: trade.type,
+                        originalTypeCapital: trade.Type
+                      });
+                    }
+                    
+                    // For hedge on hold, we want trades that are hedge=true, hedge_1_1=true
+                    // and are NOT closed (so running or no type specified)
+                    const isNotClosed = !typeValue.toLowerCase().includes("close") && 
+                                       !typeValue.toLowerCase().includes("assign");
+                    
+                    return isHedge && isHedge11 && isNotClosed;
+                  });
+                  
+                  console.log("🔍 Hedge on Hold Count:", hedgeOnHoldTrades.length);
+                  return hedgeOnHoldTrades.length;
+                })()}
               </span>
               <div style={{ height: '14px' }} />
               <span className={`text-green-300 text-[30px]`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }} title="Hedge 1-1 Profit">{hedgePlusRunning.toFixed(2)}</span>
@@ -840,8 +1047,9 @@ useEffect(() => {
 
   useEffect(() => {
     const fetchTrades = async () => {
-      const res = await fetch('https://lab-code-1.onrender.com/api/trades');
+      const res = await fetch('https://lab-code-1r1r.onrender.com/api/trades');
       const data = await res.json();
+      
       setTrades(data.trades || []);
     };
     fetchTrades();
@@ -860,6 +1068,15 @@ useEffect(() => {
           <>
             {/* Sticky LAB section at the very top of the app, outside the main flex container */}
             <div className="sticky top-0 z-40 flex justify-center items-center border-b border-gray-200 dark:border-gray-700 shadow-sm bg-[#f5f6fa] dark:bg-black" style={{ minHeight: '80px', height: '80px', padding: '0 16px' }}>
+              {/* Refresh controls (left) */}
+              <div className="absolute left-4 top-3 z-20">
+                <RefreshControls
+                  onRefresh={refreshAllData}
+                  storageKey="app_main"
+                  initialIntervalSec={20}
+                  initialAutoOn={true}
+                />
+              </div>
               {/* Light/Dark mode toggle button */}
               <button
                 onClick={() => setDarkMode(dm => !dm)}
@@ -889,7 +1106,7 @@ useEffect(() => {
               <div className={`flex-1 min-h-screen transition-all duration-300 ${isSidebarOpen ? "ml-64" : "ml-20"} overflow-hidden relative bg-[#f5f6fa] dark:bg-black`}>
                 {/* Main content area, no extra margin-top */}
                 <div className="p-8 pt-2 overflow-x-auto">
-                  <h2 className="text-2xl font-semibold text-white mb-0">Trade Filter (MODULAR)</h2>
+                  {/* <h2 className="text-2xl font-semibold text-white mb-0">Trade Filter (MODULAR)</h2> */}
                   <TradeFilterPanel
                     selectedSignals={selectedSignals}
                     setSelectedSignals={setSelectedSignals}
@@ -922,78 +1139,235 @@ useEffect(() => {
                     setDateKey={setDateKey}
                     assignedCount={getFilteredForTitle["Assigned_New"]?.length || 0}
                   />
-                  <div className="flex items-center ml-6 space-x-3">
-                    <span className="text-sm font-semibold text-black">Layout:</span>
-                    <button
-                      onClick={() => {
-                        const newOption = Math.max(1, layoutOption - 1);
-                        setLayoutOption(newOption);
-                        localStorage.setItem("layoutOption", newOption);
-                      }}
-                      className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 rounded"
-                    >
-                      ➖
-                    </button>
-                    &nbsp;&nbsp;
-                    <button
-                      onClick={() => {
-                        const newOption = Math.min(14, layoutOption + 1); // 🚀 Increase up to 14
-                        setLayoutOption(newOption);
-                        localStorage.setItem("layoutOption", newOption);
-                      }}
-                      className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 rounded"
-                    >
-                      ➕
-                    </button>
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => setFontSizeLevel(prev => {
-                          const newLevel = Math.max(1, prev - 1);
-                          localStorage.setItem("fontSizeLevel", newLevel);
-                          return newLevel;
-                        })}
-                        className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 rounded"
-                        aria-label="Decrease font size"
-                      >
-                        ➖
-                      </button>
-                      <span className="text-sm font-semibold text-black">Font: {fontSizeLevel}</span>
-                      <button
-                        onClick={() => setFontSizeLevel(prev => {
-                          const newLevel = Math.min(20, prev + 1);
-                          localStorage.setItem("fontSizeLevel", newLevel);
-                          return newLevel;
-                        })}
-                        className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 rounded"
-                        aria-label="Increase font size"
-                      >
-                        ➕
-                      </button>
-                    </div>
-                    {/* ChartGrid Toggle Button */}
-                    {/* Removed Show Chart Grid button and its logic */}
-                    <span className="text-green-600 text-[16px] font-bold block text-left mb-1">
-                      ➤ Assigned New:</span> <span
-                      className="text-red-600 text-[34px] font-bold block text-left mb-1 cursor-pointer hover:underline"
-                      title="Click to view Assigned Trades"
-                      onClick={() => {
-                        setSelectedBox((prev) => {
-                          const next = prev === "Assigned_New" ? null : "Assigned_New";
-                          if (next) {
-                            setActiveSubReport("assign");
-                            setTimeout(() => {
-                              const section = document.getElementById("tableViewSection");
-                              if (section) section.scrollIntoView({ behavior: "smooth" });
-                            }, 0);
-                          }
-                          return next;
-                        });
-                      }}
-                    >
-                      {filteredTradeData.filter(trade => trade.Type === "assign").length}
-                    </span>
-                  </div>
+        <div className="flex flex-wrap items-start gap-3 ml-0 md:ml-6">
+  {/* Controls block */}
+  <div className="flex items-center gap-3 flex-none">
+    <span className="text-sm md:text-base lg:text-lg font-semibold text-black">Layout:</span>
+    <button
+      onClick={() => {
+        const newOption = Math.max(1, layoutOption - 1);
+        setLayoutOption(newOption);
+        localStorage.setItem("layoutOption", newOption);
+      }}
+      className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 md:px-3 md:py-1.5 rounded text-sm md:text-base"
+    >
+      ➖
+    </button>
+    <button
+      onClick={() => {
+        const newOption = Math.min(14, layoutOption + 1);
+        setLayoutOption(newOption);
+        localStorage.setItem("layoutOption", newOption);
+      }}
+      className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 md:px-3 md:py-1.5 rounded text-sm md:text-base"
+    >
+      ➕
+    </button>
+
+    <span className="hidden md:inline px-2 text-gray-400">|</span>
+
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() =>
+          setFontSizeLevel((prev) => {
+            const newLevel = Math.max(1, prev - 1);
+            localStorage.setItem("fontSizeLevel", newLevel);
+            return newLevel;
+          })
+        }
+        className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 md:px-3 md:py-1.5 rounded text-sm md:text-base"
+        aria-label="Decrease font size"
+      >
+        ➖
+      </button>
+      <span className="text-sm md:text-base lg:text-lg font-semibold text-black">
+        Font: {fontSizeLevel}
+      </span>
+      <button
+        onClick={() =>
+          setFontSizeLevel((prev) => {
+            const newLevel = Math.min(20, prev + 1);
+            localStorage.setItem("fontSizeLevel", newLevel);
+            return newLevel;
+          })
+        }
+        className="bg-gray-300 hover:bg-gray-400 text-black px-2 py-1 md:px-3 md:py-1.5 rounded text-sm md:text-base"
+        aria-label="Increase font size"
+      >
+        ➕
+      </button>
+    </div>
+
+    <span className="text-green-600 text-[14px] md:text-[16px] lg:text-[18px] font-bold">
+      ➤ Assigned New:
+    </span>
+    <span
+      className="text-red-600 text-[24px] md:text-[34px] lg:text-[40px] font-bold cursor-pointer hover:underline"
+      title="Click to view Assigned Trades"
+      onClick={() => {
+        setSelectedBox((prev) => {
+          const next = prev === "Assigned_New" ? null : "Assigned_New";
+          if (next) {
+            setActiveSubReport("assign");
+            setTimeout(() => {
+              const section = document.getElementById("tableViewSection");
+              if (section) section.scrollIntoView({ behavior: "smooth" });
+            }, 0);
+          }
+          return next;
+        });
+      }}
+    >
+      {filteredTradeData.filter((trade) => trade.type === "assign").length}
+    </span>
+  </div>
+
+  {/* SuperTrend + EMA group (inline if space; wraps under if not) */}
+  <div className="flex flex-wrap items-start gap-4 flex-1 min-w-[280px]">
+    {/* SuperTrend: fixed width on sm+; full width on xs */}
+    <div className="w-full sm:w-[300px] md:w-[360px] shrink-0">
+      <SuperTrendPanel data={superTrendData} />
+    </div>
+
+    {/* EMA Grid */}
+    {emaTrends && (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 flex-1 min-w-[280px]">
+        {(() => {
+          // Smooth color from white -> target before 90 (light ramp), full at 90+
+          const pctColor = (valNum, isBull, isBear) => {
+            const v = Number(valNum);
+            if (Number.isNaN(v)) return { color: "rgb(255,255,255)" };
+            const tRaw = Math.max(0, Math.min(v / 90, 1));
+            const t = Math.pow(tRaw, 0.6);
+            const target = isBull ? [34, 197, 94] : isBear ? [239, 68, 68] : [255, 255, 255];
+            const r = Math.round(255 + (target[0] - 255) * t);
+            const g = Math.round(255 + (target[1] - 255) * t);
+            const b = Math.round(255 + (target[2] - 255) * t);
+            return { color: `rgb(${r}, ${g}, ${b})` };
+          };
+
+          const EmaBox = ({ minsLabelFull, minsLabelShort, minsLabelTiny, trendText, pct }) => {
+            const val = Number(pct);
+            const trend = (trendText || "").toLowerCase();
+            const isBull = trend.includes("bull");
+            const isBear = trend.includes("bear");
+            const hot = !Number.isNaN(val) && val >= 90;
+
+            // Base bluish bg
+            const baseBox =
+              "w-full min-w-0 flex items-center justify-between px-3 md:px-4 lg:px-5 py-2 md:py-2.5 lg:py-3 rounded-lg border transition-all duration-200 ease-out " +
+              "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900";
+
+            // Hot (≥90): tint + ring + shadow + scale + slight blink
+            const hotDecor = hot
+              ? isBear
+                ? " bg-red-50 dark:bg-red-950/40 ring-2 ring-red-300 dark:ring-red-800 shadow-md scale-[1.04] animate-pulse"
+                : isBull
+                ? " bg-green-50 dark:bg-green-950/40 ring-2 ring-green-300 dark:ring-green-800 shadow-md scale-[1.04] animate-pulse"
+                : " animate-pulse"
+              : "";
+
+            const boxClass = `${baseBox} ${hotDecor}`.trim();
+
+            // % sizing & color
+            const pctSize = hot
+              ? "text-base md:text-lg lg:text-xl xl:text-2xl"
+              : "text-sm md:text-base lg:text-lg xl:text-xl";
+            const pctStyleColor = hot
+              ? { color: isBull ? "rgb(34,197,94)" : isBear ? "rgb(239,68,68)" : "rgb(255,255,255)" }
+              : pctColor(val, isBull, isBear);
+
+            // Ultra-thin white outline on ALL text only when hot
+            const hotStrokeStyle = hot
+              ? { WebkitTextStroke: "0.15px rgba(255,255,255,0.85)", textShadow: "0 0 0.1px rgba(255,255,255,0.7)" }
+              : {};
+
+            // Arrow before label
+            const Arrow = () => (
+              <span className="inline-flex items-center text-base md:text-lg lg:text-xl flex-none shrink-0">
+                {isBull && <span className="text-green-500 leading-none">▲</span>}
+                {isBear && <span className="text-red-500 leading-none">▼</span>}
+              </span>
+            );
+
+            // Trend words (bullish/bearish) after EMA (visible from sm+; truncates first)
+            const TrendWord = () => (
+              <span
+                className={`font-bold ${isBull ? "text-green-600" : isBear ? "text-red-600" : "text-black dark:text-white"} truncate hidden sm:inline`}
+                title={trendText}
+              >
+                {trendText}
+              </span>
+            );
+
+            return (
+              <div className={boxClass} style={hotStrokeStyle}>
+                {/* LEFT: Arrow, then EMA label, then bullish/bearish */}
+                <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0 flex-1 overflow-hidden">
+                  <Arrow />
+                  {/* Interval label variants */}
+                  <span className="text-blue-700 dark:text-blue-200 font-bold flex-none shrink-0 hidden lg:block whitespace-nowrap">
+                    {minsLabelFull /* "EMA 1m:" */}
+                  </span>
+                  <span className="text-blue-700 dark:text-blue-200 font-bold flex-none shrink-0 hidden sm:block lg:hidden whitespace-nowrap">
+                    {minsLabelShort /* "1m" */}
+                  </span>
+                  <span className="text-blue-700 dark:text-blue-200 font-bold flex-none shrink-0 block sm:hidden whitespace-nowrap">
+                    {minsLabelTiny /* "1" */}
+                  </span>
+                  <TrendWord />
+                </div>
+
+                {/* RIGHT: Percentage — NEVER shrinks */}
+                <span
+                  className={`font-extrabold ${pctSize} text-right leading-none ml-3 flex-none shrink-0`}
+                  style={{
+                    ...pctStyleColor,
+                    minWidth: "76px",
+                    width: "max(76px, 5.5ch)",
+                    whiteSpace: "nowrap",
+                    display: "inline-block",
+                  }}
+                  title={`${!Number.isNaN(val) ? val.toFixed(2) : pct}%`}
+                >
+                  {!Number.isNaN(val) ? val.toFixed(2) : pct}%
+                </span>
+              </div>
+            );
+          };
+
+          return (
+            <>
+              <EmaBox
+                minsLabelFull="EMA 1m:"
+                minsLabelShort="1m"
+                minsLabelTiny="1"
+                trendText={emaTrends.overall_ema_trend_1m}
+                pct={emaTrends.overall_ema_trend_percentage_1m}
+              />
+              <EmaBox
+                minsLabelFull="EMA 5m:"
+                minsLabelShort="5m"
+                minsLabelTiny="5"
+                trendText={emaTrends.overall_ema_trend_5m}
+                pct={emaTrends.overall_ema_trend_percentage_5m}
+              />
+              <EmaBox
+                minsLabelFull="EMA 15m:"
+                minsLabelShort="15m"
+                minsLabelTiny="15"
+                trendText={emaTrends.overall_ema_trend_15m}
+                pct={emaTrends.overall_ema_trend_percentage_15m}
+              />
+            </>
+          );
+        })()}
+      </div>
+    )}
+  </div>
+</div>
+
+
                   {/* ✅ Dashboard Cards */}
                   {metrics && (
                     <div
@@ -1050,7 +1424,7 @@ useEffect(() => {
                       } else {
                         return (
                           <p className="text-center text-gray-500 mt-4">
-                            ⚠️ No relevant data available for {selectedBox.replace(/_/g, " ")}
+                            ⚠️ No relevant data available for {selectedBox.replace(/_/g, " ")} (Found {data?.length || 0} items)
                           </p>
                         );
                       }
@@ -1069,4 +1443,3 @@ useEffect(() => {
 };
 
 export default App;
-   

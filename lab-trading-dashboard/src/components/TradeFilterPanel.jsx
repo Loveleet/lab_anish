@@ -177,11 +177,11 @@ const TradeFilterPanel = ({
               const toggled = !machineRadioMode;
               setMachineRadioMode(toggled);
               if (toggled) {
-                const selected = machines.find((m) => selectedMachines[m.MachineId]);
+                const selected = machines.find((m) => selectedMachines[m.machineid]);
                 if (selected) {
                   const updated = {};
                   machines.forEach((m) => {
-                    if (m.Active) updated[m.MachineId] = m.MachineId === selected.MachineId;
+                    if (m.active) updated[m.machineid] = m.machineid === selected.machineid;
                   });
                   setSelectedMachines(updated);
                   localStorage.setItem("selectedMachines", JSON.stringify(updated));
@@ -199,9 +199,10 @@ const TradeFilterPanel = ({
                 const allChecked = Object.values(selectedMachines).every(v => v === true);
                 const updated = {};
                 machines.forEach(machine => {
-                  if (machine.Active) updated[machine.MachineId] = !allChecked;
+                  if (machine.active) updated[machine.machineid] = !allChecked;
                 });
                 setSelectedMachines(updated);
+                setMachineToggleAll(!allChecked);
                 localStorage.setItem("selectedMachines", JSON.stringify(updated));
               }}
               className={`text-xs font-semibold px-2 py-1 rounded w-fit ml-2 ${
@@ -217,18 +218,18 @@ const TradeFilterPanel = ({
         </div>
         <div className="flex flex-wrap gap-2">
           {machines
-            .filter(machine => machine.Active)
+            .filter(machine => machine.active)
             .map((machine) => (
-              <label key={machine.MachineId} className="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-700">
+              <label key={machine.machineid} className="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-700">
                 {machineRadioMode ? (
                   <input
                     type="radio"
                     name="machineRadio"
-                    checked={selectedMachines[machine.MachineId] === true}
+                    checked={selectedMachines[machine.machineid] === true}
                     onChange={() => {
                       const updated = {};
                       machines.forEach((m) => {
-                        if (m.Active) updated[m.MachineId] = m.MachineId === machine.MachineId;
+                        if (m.active) updated[m.machineid] = m.machineid === machine.machineid;
                       });
                       setSelectedMachines(updated);
                       localStorage.setItem("selectedMachines", JSON.stringify(updated));
@@ -239,12 +240,12 @@ const TradeFilterPanel = ({
                 ) : (
                   <input
                     type="checkbox"
-                    checked={selectedMachines[machine.MachineId] || false}
-                    onChange={() => toggleMachine(machine.MachineId)}
+                    checked={selectedMachines[machine.machineid] || false}
+                    onChange={() => toggleMachine(machine.machineid)}
                     className="form-checkbox h-5 w-5 text-blue-600"
                   />
                 )}
-                <span className="text-gray-700 dark:text-gray-200 font-semibold">{machine.MachineId}</span>
+                <span className="text-gray-700 dark:text-gray-200 font-semibold">{machine.machineid}</span>
               </label>
             ))}
         </div>
