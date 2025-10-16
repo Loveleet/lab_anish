@@ -69,7 +69,7 @@ const dbConfig = {
   password: "IndiaNepal1-",
   host: "150.241.244.130",
   port: 5432,
-  database: "labdb2",
+  database: "olab",
   ssl: { rejectUnauthorized: false }, // Force SSL for cloud PostgreSQL
   connectionTimeoutMillis: 30000,
   idleTimeoutMillis: 30000,
