@@ -13,7 +13,9 @@ const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'tru
 // ✅ Allowed Frontend Origins (Local + Vercel + Render)
 const allowedOrigins = [
   "http://localhost:5173", // Local Vite
-  "http://localhost:5174", // Alternate local Vite
+  "http://localhost:5174", 
+  "https://lab-anish.vercel.app",
+  "https://lab-anish.onrender.com/api/trades",// Alternate local Vite
   "https://lab-anish.onrender.com", // Your backend (if you ever serve frontend from here)
   "https://lab-anish.vercel.app", // Vercel frontend
   "https://lab-anish.onrender.com", // Alternate Render frontend
