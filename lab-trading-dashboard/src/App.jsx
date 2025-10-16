@@ -21,7 +21,7 @@ import SuperTrendPanel from "./SuperTrendPanel";
 // Helper to get API base URL
 const API_BASE_URL =
   import.meta.env.MODE === "production"
-    ? "https://lab-code-5v36.onrender.com"
+    ? "https://lab-anish.onrender.com"
     : "";
 
 // Animated SVG background for LAB title

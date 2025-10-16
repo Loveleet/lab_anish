@@ -387,7 +387,7 @@ const LiveTradeViewPage = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-5v36.onrender.com/api/machines');
+        const res = await fetch('https://lab-anish.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -440,7 +440,7 @@ const LiveTradeViewPage = () => {
   const [trades, setTrades] = useState([]);
   useEffect(() => {
     // Fetch all trades like the main grid does, then filter by pair
-          fetch('https://lab-code-5v36.onrender.com/api/trades')
+          fetch('https://lab-anish.onrender.com/api/trades')
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
@@ -470,8 +470,8 @@ const LiveTradeViewPage = () => {
     setCurrentPage(1); // Reset to first page when uid changes
     // Fetch bot event logs filtered by UID from the database using existing API with pagination
     const url = uid 
-              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`
-        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=1&limit=${logsPerPage}`;
+              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`
+        : `https://lab-anish.onrender.com/api/bot-event-logs?page=1&limit=${logsPerPage}`;
     
 
     
@@ -585,8 +585,8 @@ const LiveTradeViewPage = () => {
     // Refetch data with new page size
     setLogsLoading(true);
     const url = uid 
-              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`
-        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=1&limit=${newRowsPerPage}`;
+              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`
+        : `https://lab-anish.onrender.com/api/bot-event-logs?page=1&limit=${newRowsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -613,8 +613,8 @@ const LiveTradeViewPage = () => {
     setCurrentPage(newPage);
     
     const url = uid 
-              ? `https://lab-code-5v36.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`
-        : `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`;
+              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`
+        : `https://lab-anish.onrender.com/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -1652,7 +1652,7 @@ const LiveTradeViewPage = () => {
     // Only fetch when wholeSortKey or wholeSortDirection changes (triggered by W button clicks)
     if (!wholeSortKey && !wholeSortDirection) return;
     setWholeLogsLoading(true);
-    let url = `https://lab-code-5v36.onrender.com/api/bot-event-logs?page=${wholeCurrentPage}&limit=${logsPerPage}`;
+    let url = `https://lab-anish.onrender.com/api/bot-event-logs?page=${wholeCurrentPage}&limit=${logsPerPage}`;
     url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
     if (uid) url += `&uid=${encodeURIComponent(uid)}`;
     fetch(url)
@@ -1732,7 +1732,7 @@ const LiveTradeViewPage = () => {
     } else if (choice === 'whole') {
       // Export all filtered/sorted data from backend
       setExportLoading(true);
-      let url = `https://lab-code-5v36.onrender.com/api/bot-event-logs?limit=all`;
+      let url = `https://lab-anish.onrender.com/api/bot-event-logs?limit=all`;
       url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
       if (uid) url += `&uid=${encodeURIComponent(uid)}`;
       try {

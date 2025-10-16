@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'https://lab-code-5v36.onrender.com',
+      '/api': 'https://lab-anish.onrender.com',
     },
   },
 })

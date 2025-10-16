@@ -427,7 +427,7 @@ const PairStatsGrid = ({ onPairSelect, candleType, interval, trades = [], select
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-5v36.onrender.com/api/machines');
+        const res = await fetch('https://lab-anish.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {

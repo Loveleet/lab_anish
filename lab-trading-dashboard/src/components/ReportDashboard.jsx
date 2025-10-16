@@ -144,7 +144,7 @@ const ReportDashboard = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-5v36.onrender.com/api/machines');
+        const res = await fetch('https://lab-anish.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -193,8 +193,8 @@ const ReportDashboard = () => {
   const refreshReportData = async () => {
     try {
       const [machinesRes, tradesRes] = await Promise.all([
-                  fetch('https://lab-code-5v36.onrender.com/api/machines'),
-        fetch('https://lab-code-5v36.onrender.com/api/trades'),
+                  fetch('https://lab-anish.onrender.com/api/machines'),
+        fetch('https://lab-anish.onrender.com/api/trades'),
       ]);
       const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
       const tradesJson = tradesRes.ok ? await tradesRes.json() : { trades: [] };
