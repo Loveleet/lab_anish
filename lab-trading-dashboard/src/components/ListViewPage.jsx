@@ -420,7 +420,7 @@ const ListViewPage = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-code-1r1r.onrender.com/api/machines');
+        const res = await fetch('https://lab-anish.onrender.com/api/machines');
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -452,7 +452,7 @@ const ListViewPage = () => {
   const [trades, setTrades] = useState([]);
   useEffect(() => {
     // Fetch all trades like the main grid does, then filter by pair
-    fetch('https://lab-code-1r1r.onrender.com/api/trades')
+    fetch('https://lab-anish.onrender.com/api/trades')
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
@@ -482,8 +482,8 @@ const ListViewPage = () => {
     setCurrentPage(1); // Reset to first page when symbol changes
     // Fetch logs filtered by symbol from the database using existing API with pagination
     const url = pair 
-      ? `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=1&limit=${logsPerPage}`
-      : `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?page=1&limit=${logsPerPage}`;
+      ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=1&limit=${logsPerPage}`
+      : `https://lab-anish.onrender.com/api/SignalProcessingLogs?page=1&limit=${logsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -595,8 +595,8 @@ const ListViewPage = () => {
     // Refetch data with new page size
     setLogsLoading(true);
     const url = pair 
-      ? `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=1&limit=${newRowsPerPage}`
-      : `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?page=1&limit=${newRowsPerPage}`;
+      ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=1&limit=${newRowsPerPage}`
+      : `https://lab-anish.onrender.com/api/SignalProcessingLogs?page=1&limit=${newRowsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -623,8 +623,8 @@ const ListViewPage = () => {
     setCurrentPage(newPage);
     
     const url = pair 
-      ? `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=${newPage}&limit=${logsPerPage}`
-      : `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?page=${newPage}&limit=${logsPerPage}`;
+      ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=${newPage}&limit=${logsPerPage}`
+      : `https://lab-anish.onrender.com/api/SignalProcessingLogs?page=${newPage}&limit=${logsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -1642,8 +1642,8 @@ const ListViewPage = () => {
     if (!wholeSortKey && !wholeSortDirection) return;
     setWholeDataLoading(true);
     const url = pair
-      ? `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
-      : `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+      ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
+      : `https://lab-anish.onrender.com/api/SignalProcessingLogs?page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
     fetch(url)
       .then(res => res.json())
       .then(data => {
@@ -1832,8 +1832,8 @@ const ListViewPage = () => {
       // Export all filtered/sorted data from backend
       setExportLoading(true);
       const url = pair
-        ? `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&limit=all&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
-        : `https://lab-code-1r1r.onrender.com/api/SignalProcessingLogs?limit=all&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+        ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(pair)}&limit=all&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
+        : `https://lab-anish.onrender.com/api/SignalProcessingLogs?limit=all&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
       try {
         const res = await fetch(url);
         const data = await res.json();

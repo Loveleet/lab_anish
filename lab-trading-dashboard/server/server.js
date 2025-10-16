@@ -14,9 +14,9 @@ const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'tru
 const allowedOrigins = [
   "http://localhost:5173", // Local Vite
   "http://localhost:5174", // Alternate local Vite
-  "https://lab-code-1r1r.onrender.com", // Your backend (if you ever serve frontend from here)
-  "https://lab-code-4kbs.vercel.app", // Vercel frontend
-  "https://lab-code-1r1r.onrender.com", // Alternate Render frontend
+  "https://lab-anish.onrender.com", // Your backend (if you ever serve frontend from here)
+  "https://lab-anish.vercel.app", // Vercel frontend
+  "https://lab-anish.onrender.com", // Alternate Render frontend
   "https://lab-code-4kbs-git-lab-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   "https://lab-code-4kbs-q77fv3aml-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   // Add any other frontend URLs you use here
@@ -194,7 +194,7 @@ app.get("/api/pairstatus", async (req, res) => {
 // ✅ Binance Proxy Endpoint
 const LOCAL_PROXY =
   process.env.NODE_ENV === 'production'
-    ? 'https://lab-code-1r1r.onrender.com/api/klines'
+    ? 'https://lab-anish.onrender.com/api/klines'
     : 'http://localhost:10000/api/klines';
 
 app.get('/api/klines', async (req, res) => {
@@ -779,7 +779,7 @@ const http = require("https");
 // Self-Ping to Prevent Render Sleep (every 14 minutes) — gated by env
 if (ENABLE_SELF_PING) {
   setInterval(() => {
-    http.get("https://lab-code-1r1r.onrender.com/api/machines", (res) => {
+    http.get("https://lab-anish.onrender.com/api/machines", (res) => {
       if (VERBOSE_LOG) console.log(`📡 Self-ping status: ${res.statusCode}`);
     }).on("error", (err) => {
       console.error("❌ Self-ping failed:", err.message);

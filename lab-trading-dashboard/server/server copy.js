@@ -13,7 +13,7 @@ const allowedOrigins = [
   "http://localhost:5173", // Local Vite
   "http://localhost:5174", // Alternate local Vite
   "https://lab-code-5v36.onrender.com", // Your backend (if you ever serve frontend from here)
-  "https://lab-code-4kbs.vercel.app", // Vercel frontend
+  "https://lab-anish.vercel.app", // Vercel frontend
   "https://lab-code-5v36.onrender.com", // Alternate Render frontend
   "https://lab-code-4kbs-git-lab-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   "https://lab-code-4kbs-q77fv3aml-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview

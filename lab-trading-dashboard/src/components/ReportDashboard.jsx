@@ -174,7 +174,7 @@ const ReportDashboard = () => {
 
   // Fetch trades data
   useEffect(() => {
-    fetch('https://lab-code-1r1r.onrender.com/api/trades')
+    fetch('https://lab-anish.onrender.com/api/trades')
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];

@@ -1047,7 +1047,7 @@ useEffect(() => {
 
   useEffect(() => {
     const fetchTrades = async () => {
-      const res = await fetch('https://lab-code-1r1r.onrender.com/api/trades');
+      const res = await fetch('https://lab-anish.onrender.com/api/trades');
       const data = await res.json();
       
       setTrades(data.trades || []);
