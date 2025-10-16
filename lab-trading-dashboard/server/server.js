@@ -57,7 +57,7 @@ const dbConfig = {
   password: "IndiaNepal1-",
   server: "20.40.58.121",
   port: 1433,
-  database: "labDB2",
+  database: "olab",
   options: {
     encrypt: false,
     trustServerCertificate: true,
