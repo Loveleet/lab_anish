@@ -15,10 +15,10 @@ const allowedOrigins = [
   "http://localhost:5173", // Local Vite
   "http://localhost:5174", 
   "https://lab-anish.vercel.app",
-  "https://lab-anish.onrender.com/api/trades",// Alternate local Vite
-  "https://lab-anish.onrender.com", // Your backend (if you ever serve frontend from here)
+  "https://lab-anish2.onrender.com/api/trades",// Alternate local Vite
+  "https://lab-anish2.onrender.com", // Your backend (if you ever serve frontend from here)
   "https://lab-anish.vercel.app", // Vercel frontend
-  "https://lab-anish.onrender.com", // Alternate Render frontend
+  "https://lab-anish2.onrender.com", // Alternate Render frontend
   "https://lab-code-4kbs-git-lab-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   "https://lab-code-4kbs-q77fv3aml-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
   // Add any other frontend URLs you use here
