@@ -326,9 +326,47 @@ const LiveTradeViewPage = () => {
     return isDate;
   };
 
+  const formatJsonMessage = (value, forTooltip = false) => {
+    if (value == null) return '';
+    let obj = value;
+    if (typeof value === 'string') {
+      try {
+        obj = JSON.parse(value.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null'));
+      } catch {
+        // Not JSON, just return string
+        return value;
+      }
+    }
+    if (typeof obj !== 'object' || Array.isArray(obj)) return String(value);
+
+    const toLabel = (key) =>
+      key
+        .replace(/[_]/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const lines = Object.entries(obj).map(([k, v]) => `${toLabel(k)}: ${v === null || v === undefined ? '' : v}`);
+    if (forTooltip) return lines.join('\n');
+    const maxLines = 3;
+    return lines.length > maxLines ? `${lines.slice(0, maxLines).join(' | ')} …` : lines.join(' | ');
+  };
+  const toLabel = (key) =>
+    (key || '')
+      .replace(/[_]/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
   // Helper function to format cell value
-  const formatCellValue = (value, fieldName) => {
+  const formatCellValue = (value, fieldName, { forTooltip = false } = {}) => {
     if (value == null || value === '') return '';
+
+    // JSON/Plain message → label: value lines
+    if (fieldName) {
+      const lower = fieldName.toLowerCase();
+      if (lower.includes('plain_message') || lower.includes('json_message')) {
+        return formatJsonMessage(value, forTooltip);
+      }
+    }
     
     // Check if it's a date field and format accordingly
     if (isDateField(fieldName)) {
@@ -871,11 +909,25 @@ const LiveTradeViewPage = () => {
       console.log(`=== Log ${index} ===`);
       console.log('Full log object:', log);
       
-      // Try parsed_json_message first, fallback to json_data
+      // Try parsed_json_message first, fallback to json_message or json_data
       let json = null;
       if (log.parsed_json_message && typeof log.parsed_json_message === 'object') {
         json = log.parsed_json_message;
         console.log('Using parsed_json_message:', json);
+      } else if (log.json_message) {
+        try {
+          if (typeof log.json_message === 'string') {
+            let raw = log.json_message.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
+            json = JSON.parse(raw);
+            console.log('Parsed json_message:', json);
+          } else {
+            json = log.json_message;
+            console.log('Using json_message directly:', json);
+          }
+        } catch (error) {
+          console.error('Error parsing json_message:', error);
+          console.error('Problematic json_message:', log.json_message);
+        }
       } else if (log.json_data) {
         try {
           if (typeof log.json_data === 'string') {
@@ -894,25 +946,7 @@ const LiveTradeViewPage = () => {
         }
       }
 
-      if (!json) {
-        console.log('No valid JSON data found');
-        return;
-      }
-
-      // Log the structure of signal_data and all_last_rows
-      console.log('json.signal_data:', json.signal_data);
-      if (json.signal_data && json.signal_data.all_last_rows) {
-        console.log('all_last_rows keys:', Object.keys(json.signal_data.all_last_rows));
-        console.log('all_last_rows structure:', json.signal_data.all_last_rows);
-        
-        // Log each interval's structure
-        Object.entries(json.signal_data.all_last_rows).forEach(([interval, data]) => {
-          console.log(`Interval ${interval} keys:`, Object.keys(data));
-          console.log(`Interval ${interval} sample data:`, data);
-        });
-      } else {
-        console.log('No signal_data.all_last_rows found');
-      }
+      if (!json) return;
 
       let allRows = undefined;
       try {
@@ -934,6 +968,13 @@ const LiveTradeViewPage = () => {
           }
         });
       }
+
+      // Also pull top-level JSON message keys into a synthetic interval so they appear as labels
+      Object.keys(json || {}).forEach(key => {
+        if (!labelMap[key]) labelMap[key] = new Set();
+        labelMap[key].add('json_message');
+        intervalSet.add('json_message');
+      });
     });
 
     const allIntervals = Array.from(intervalSet).sort((a, b) => {
@@ -943,7 +984,7 @@ const LiveTradeViewPage = () => {
     });
 
     return Object.entries(labelMap).map(([label, intervals]) => ({
-      label,
+      label: toLabel(label),
       value: label,
       intervals: allIntervals.map(interval => ({
         interval,
@@ -992,6 +1033,7 @@ const LiveTradeViewPage = () => {
     return { existed, newlyAdded, deleted };
   }
   const { existed, newlyAdded, deleted } = getJsonLabelSections(apiJsonLabels, activeJsonLabels || {});
+  const [allJsonChecked, setAllJsonChecked] = useState(false);
 
   // Add all newly added labels
   function handleAddAllNewJsonLabels() {
@@ -1060,7 +1102,7 @@ const LiveTradeViewPage = () => {
         list.push({
           type: 'json',
           value: parent.value,
-          label: parent.label,
+          label: parent.label || toLabel(parent.value),
           intervals: parent.intervals // [{interval, exists}]
         });
         seenJson.add(parent.value);
@@ -2281,6 +2323,48 @@ const LiveTradeViewPage = () => {
               >
                 {allRegularChecked ? 'Uncheck All Regular' : 'Check All Regular'}
               </button>
+              <button
+                onClick={() => {
+                  if (!allJsonChecked) {
+                    const updated = {};
+                    if (apiJsonLabels.length > 0) {
+                      apiJsonLabels.forEach(parent => {
+                        updated[parent.value] = {};
+                        (parent.intervals || []).forEach(i => {
+                          const iv = i.interval || i;
+                          updated[parent.value][iv] = true;
+                        });
+                      });
+                    } else {
+                      Object.keys(activeJsonLabels || {}).forEach(label => {
+                        updated[label] = {};
+                        Object.keys(activeJsonLabels[label] || {}).forEach(iv => {
+                          updated[label][iv] = true;
+                        });
+                      });
+                    }
+                    setActiveJsonLabels(updated);
+                    setAllJsonChecked(true);
+                  } else {
+                    setActiveJsonLabels({});
+                    setAllJsonChecked(false);
+                  }
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  background: allJsonChecked ? '#ef4444' : '#22c55e',
+                  color: '#fff',
+                  boxShadow: allJsonChecked ? '0 2px 8px #ef444444' : '0 2px 8px #22c55e44',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {allJsonChecked ? 'Uncheck All JSON' : 'Check All JSON'}
+              </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 8, background: '#222', color: '#fff', padding: 8, border: '2px solid #fbbf24', borderRadius: 8 }}>
                   <span style={{ fontWeight: 500, marginRight: 4 }}>Intervals:</span>
                   {masterIntervals.map(interval => (
@@ -2395,7 +2479,7 @@ const LiveTradeViewPage = () => {
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', marginBottom: 1, lineHeight: 1.2 }}>
-                              <span style={{ fontWeight: 500, fontSize: '0.95em' }}>{item.label}</span>
+                  <span style={{ fontWeight: 500, fontSize: '0.95em' }}>{item.label || toLabel(item.value)}</span>
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 0, alignItems: 'flex-start', lineHeight: 1 }}>
                               {visibleIntervals.map(({ interval, exists }) => (
@@ -2875,10 +2959,19 @@ const LiveTradeViewPage = () => {
 
 
                   return sortedRows.map((row, idx) => {
-                    // Use parsed_json_message first, fallback to json_data
+                    // Use parsed_json_message first, fallback to json_message/json_data
                     let json = null;
                     if (row.parsed_json_message && typeof row.parsed_json_message === 'object') {
                       json = row.parsed_json_message;
+                    } else if (row.json_message) {
+                      try {
+                        if (typeof row.json_message === 'string') {
+                          let raw = row.json_message.replace(/\bNaN\b|\bInfinity\b|\b-Infinity\b/g, 'null');
+                          json = JSON.parse(raw);
+                        } else {
+                          json = row.json_message;
+                        }
+                      } catch { json = {}; }
                     } else if (row.json_data) {
                       try {
                         if (typeof row.json_data === 'string') {
@@ -2889,7 +2982,11 @@ const LiveTradeViewPage = () => {
                         }
                       } catch { json = {}; }
                     }
-                    const allRows = json?.signal_data?.all_last_rows || {};
+                    // Merge signal_data intervals plus top-level json_message keys into a synthetic interval
+                    const allRows = {
+                      ...(json?.signal_data?.all_last_rows || {}),
+                      json_message: json && typeof json === 'object' && !Array.isArray(json) ? json : {}
+                    };
                     // Determine unique key for row selection
                     const rowKey = row.unique_id != null ? row.unique_id : idx;
                     const isSelected = selectedRow === rowKey;
@@ -2937,8 +3034,8 @@ const LiveTradeViewPage = () => {
                                 lineHeight: '1 !important', // Minimal line height
                                 height: '20px !important', // Smaller fixed height
                                 verticalAlign: 'middle !important', // Center content vertically
-                              }} title={row[item.value] != null ? formatCellValue(row[item.value], item.value) : ''}>
-                                {row[item.value] != null ? formatCellValue(row[item.value], item.value) : ''}
+                                  }} title={row[item.value] != null ? formatCellValue(row[item.value], item.value, { forTooltip: true }) : ''}>
+                                    {row[item.value] != null ? formatCellValue(row[item.value], item.value) : ''}
                               </td>
                             );
                           }
@@ -2961,7 +3058,7 @@ const LiveTradeViewPage = () => {
                                   lineHeight: '1 !important', // Minimal line height
                                   height: '20px !important', // Smaller fixed height
                                   verticalAlign: 'middle !important', // Center content vertically
-                                }} title={value !== undefined ? formatCellValue(value, item.value) : ''}>
+                                }} title={value !== undefined ? formatCellValue(value, item.value, { forTooltip: true }) : ''}>
                                   {value !== undefined ? formatCellValue(value, item.value) : '-'}
                                 </td>
                               );
