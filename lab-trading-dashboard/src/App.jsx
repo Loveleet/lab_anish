@@ -131,6 +131,7 @@ const App = () => {
     const saved = localStorage.getItem("machineRadioMode");
     return saved ? JSON.parse(saved) : false;
   });
+  const toMachineKey = useCallback((id) => (id === null || id === undefined ? "" : String(id)), []);
   const [includeMinClose, setIncludeMinClose] = useState(true);
   const [activeSubReport, setActiveSubReport] = useState("running");
   const [fontSizeLevel, setFontSizeLevel] = useState(() => {
@@ -302,7 +303,9 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
           setSelectedMachines(JSON.parse(savedMachines));
         } else {
           const activeMachines = machinesList.reduce((acc, machine) => {
-            if (machine.active) acc[machine.machineid] = true;
+            const key = toMachineKey(machine.machineid);
+            // Default select active machines; keep inactive visible but unselected
+            acc[key] = !!machine.active;
             return acc;
           }, {});
           setSelectedMachines(activeMachines);
@@ -324,7 +327,7 @@ const filteredTradeData = useMemo(() => {
 
     if (!includeMinClose && trade.min_close === "Min_close") return false;
     const isSignalSelected = selectedSignals[trade.signalfrom];
-    const isMachineSelected = selectedMachines[trade.machineid];
+    const isMachineSelected = selectedMachines[toMachineKey(trade.machineid)];
     const isIntervalSelected = selectedIntervals[trade.interval];
     const isActionSelected = selectedActions[trade.action];
 
@@ -978,11 +981,12 @@ useEffect(() => {
 // Optimized toggle handlers
 const toggleMachine = useCallback((machineId) => {
   setSelectedMachines(prev => {
-    const updated = { ...prev, [machineId]: !prev[machineId] };
+    const key = toMachineKey(machineId);
+    const updated = { ...prev, [key]: !prev[key] };
     localStorage.setItem("selectedMachines", JSON.stringify(updated));
     return updated;
   });
-}, []);
+}, [toMachineKey]);
 
 
 

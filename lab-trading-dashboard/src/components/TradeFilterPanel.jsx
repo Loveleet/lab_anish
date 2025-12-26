@@ -47,6 +47,7 @@ const TradeFilterPanel = ({
   assignedCount,
   dateKey
 }) => {
+  const toMachineKey = (id) => (id === null || id === undefined ? "" : String(id));
   // --- Helper functions for toggling checkboxes/radios in the copied block ---
   // Only define if not present (for this component scope)
   const toggleSignal = (signal) => {
@@ -58,8 +59,9 @@ const TradeFilterPanel = ({
   };
 
   const toggleMachine = (machineId) => {
+    const key = toMachineKey(machineId);
     setSelectedMachines((prev) => {
-      const updated = { ...prev, [machineId]: !prev[machineId] };
+      const updated = { ...prev, [key]: !prev[key] };
       localStorage.setItem("selectedMachines", JSON.stringify(updated));
       return updated;
     });
@@ -177,11 +179,12 @@ const TradeFilterPanel = ({
               const toggled = !machineRadioMode;
               setMachineRadioMode(toggled);
               if (toggled) {
-                const selected = machines.find((m) => selectedMachines[m.machineid]);
+                const selected = machines.find((m) => selectedMachines[toMachineKey(m.machineid)]);
                 if (selected) {
                   const updated = {};
                   machines.forEach((m) => {
-                    if (m.active) updated[m.machineid] = m.machineid === selected.machineid;
+                    const key = toMachineKey(m.machineid);
+                    updated[key] = key === toMachineKey(selected.machineid);
                   });
                   setSelectedMachines(updated);
                   localStorage.setItem("selectedMachines", JSON.stringify(updated));
@@ -199,7 +202,8 @@ const TradeFilterPanel = ({
                 const allChecked = Object.values(selectedMachines).every(v => v === true);
                 const updated = {};
                 machines.forEach(machine => {
-                  if (machine.active) updated[machine.machineid] = !allChecked;
+                  const key = toMachineKey(machine.machineid);
+                  updated[key] = !allChecked;
                 });
                 setSelectedMachines(updated);
                 setMachineToggleAll(!allChecked);
@@ -218,18 +222,18 @@ const TradeFilterPanel = ({
         </div>
         <div className="flex flex-wrap gap-2">
           {machines
-            .filter(machine => machine.active)
             .map((machine) => (
               <label key={machine.machineid} className="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-700">
                 {machineRadioMode ? (
                   <input
                     type="radio"
                     name="machineRadio"
-                    checked={selectedMachines[machine.machineid] === true}
+                    checked={selectedMachines[toMachineKey(machine.machineid)] === true}
                     onChange={() => {
                       const updated = {};
                       machines.forEach((m) => {
-                        if (m.active) updated[m.machineid] = m.machineid === machine.machineid;
+                        const key = toMachineKey(m.machineid);
+                        updated[key] = key === toMachineKey(machine.machineid);
                       });
                       setSelectedMachines(updated);
                       localStorage.setItem("selectedMachines", JSON.stringify(updated));
@@ -240,12 +244,15 @@ const TradeFilterPanel = ({
                 ) : (
                   <input
                     type="checkbox"
-                    checked={selectedMachines[machine.machineid] || false}
-                    onChange={() => toggleMachine(machine.machineid)}
+                    checked={selectedMachines[toMachineKey(machine.machineid)] || false}
+                    onChange={() => toggleMachine(toMachineKey(machine.machineid))}
                     className="form-checkbox h-5 w-5 text-blue-600"
                   />
                 )}
-                <span className="text-gray-700 dark:text-gray-200 font-semibold">{machine.machineid}</span>
+                <span className="text-gray-700 dark:text-gray-200 font-semibold">
+                  {machine.machineid}
+                  {!machine.active && <span className="ml-1 text-xs text-red-500">(inactive)</span>}
+                </span>
               </label>
             ))}
         </div>
