@@ -7,6 +7,10 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import * as XLSX from 'xlsx';
 
+// Use same-origin during dev (Vite proxy), Render in production
+const API_BASE_URL = import.meta.env.MODE === 'production' ? 'https://lab-anish.onrender.com' : '';
+const api = (path) => `${API_BASE_URL}${path}`;
+
 // loveleet work
 function useQuery() {
   return new URLSearchParams(useLocation().search);
@@ -384,10 +388,25 @@ const LiveTradeViewPage = () => {
   }, [selectedSignals]);
 
   const [machines, setMachines] = useState([]);
+  const parseBoolean = (value) => {
+    if (value === true || value === "true" || value === 1 || value === "1") return true;
+    if (typeof value === 'string') {
+      const numValue = parseFloat(value);
+      return !isNaN(numValue) && numValue > 0;
+    }
+    return false;
+  };
+  const toMachineKey = (id) => (id === null || id === undefined ? "" : String(id));
+  const normalizedMachines = useMemo(() => {
+    return machines.map((m) => ({
+      MachineId: toMachineKey(m.machineid ?? m.MachineId ?? m.machine_id ?? m.machineID ?? m.id),
+      Active: parseBoolean(m.active ?? m.Active ?? m.is_active ?? m.status)
+    })).filter(m => m.MachineId);
+  }, [machines]);
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-anish.onrender.com/api/machines');
+        const res = await fetch(api('/api/machines'));
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
@@ -396,7 +415,7 @@ const LiveTradeViewPage = () => {
     };
     fetchMachines();
   }, []);
-  const allMachines = machines.filter(m => m.Active);
+  const allMachines = normalizedMachines;
   const [selectedMachines, setSelectedMachines] = useState(() => {
     const saved = localStorage.getItem('liveTradeView_selected_machines');
 
@@ -413,6 +432,13 @@ const LiveTradeViewPage = () => {
 
     return obj;
   });
+  useEffect(() => {
+    if (allMachines.length && Object.keys(selectedMachines).length === 0) {
+      const obj = {};
+      allMachines.forEach(m => { obj[m.MachineId] = true; });
+      setSelectedMachines(obj);
+    }
+  }, [allMachines, selectedMachines]);
   const [machineRadioMode, setMachineRadioMode] = useState(() => localStorage.getItem('liveTradeView_machine_radio_mode') === 'true');
   const [machineToggleAll, setMachineToggleAll] = useState(() => localStorage.getItem('liveTradeView_machine_toggle_all') === 'true');
 
@@ -440,12 +466,19 @@ const LiveTradeViewPage = () => {
   const [trades, setTrades] = useState([]);
   useEffect(() => {
     // Fetch all trades like the main grid does, then filter by pair
-          fetch('https://lab-anish.onrender.com/api/trades')
+    fetch(api('/api/trades'))
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
         // Filter by pair if specified
-        const tradesArray = uid ? allTrades.filter(t => t.pair === uid) : allTrades;
+        const tradesArray = uid
+          ? allTrades.filter(t =>
+              (t.pair && String(t.pair) === uid) ||
+              (t.Pair && String(t.Pair) === uid) ||
+              (t.unique_id && String(t.unique_id) === uid) ||
+              (t.Unique_ID && String(t.Unique_ID) === uid)
+            )
+          : allTrades;
         setTrades(tradesArray);
 
       })
@@ -470,8 +503,8 @@ const LiveTradeViewPage = () => {
     setCurrentPage(1); // Reset to first page when uid changes
     // Fetch bot event logs filtered by UID from the database using existing API with pagination
     const url = uid 
-              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`
-        : `https://lab-anish.onrender.com/api/bot-event-logs?page=1&limit=${logsPerPage}`;
+              ? api(`/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${logsPerPage}`)
+        : api(`/api/bot-event-logs?page=1&limit=${logsPerPage}`);
     
 
     
@@ -558,7 +591,7 @@ const LiveTradeViewPage = () => {
 
     const filtered = logs.filter(log => {
       // Filter by machine if specified
-      if (Object.keys(selectedMachines).length && !selectedMachines[log.machine_id]) {
+      if (Object.keys(selectedMachines).length && !selectedMachines[toMachineKey(log.machine_id)]) {
 
         return false;
       }
@@ -585,8 +618,8 @@ const LiveTradeViewPage = () => {
     // Refetch data with new page size
     setLogsLoading(true);
     const url = uid 
-              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`
-        : `https://lab-anish.onrender.com/api/bot-event-logs?page=1&limit=${newRowsPerPage}`;
+              ? api(`/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=1&limit=${newRowsPerPage}`)
+        : api(`/api/bot-event-logs?page=1&limit=${newRowsPerPage}`);
     
     fetch(url)
       .then(res => res.json())
@@ -613,8 +646,8 @@ const LiveTradeViewPage = () => {
     setCurrentPage(newPage);
     
     const url = uid 
-              ? `https://lab-anish.onrender.com/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`
-        : `https://lab-anish.onrender.com/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`;
+              ? api(`/api/bot-event-logs?uid=${encodeURIComponent(uid)}&page=${newPage}&limit=${logsPerPage}`)
+        : api(`/api/bot-event-logs?page=${newPage}&limit=${logsPerPage}`);
     
     fetch(url)
       .then(res => res.json())
@@ -1652,7 +1685,7 @@ const LiveTradeViewPage = () => {
     // Only fetch when wholeSortKey or wholeSortDirection changes (triggered by W button clicks)
     if (!wholeSortKey && !wholeSortDirection) return;
     setWholeLogsLoading(true);
-    let url = `https://lab-anish.onrender.com/api/bot-event-logs?page=${wholeCurrentPage}&limit=${logsPerPage}`;
+    let url = api(`/api/bot-event-logs?page=${wholeCurrentPage}&limit=${logsPerPage}`);
     url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
     if (uid) url += `&uid=${encodeURIComponent(uid)}`;
     fetch(url)
@@ -1732,7 +1765,7 @@ const LiveTradeViewPage = () => {
     } else if (choice === 'whole') {
       // Export all filtered/sorted data from backend
       setExportLoading(true);
-      let url = `https://lab-anish.onrender.com/api/bot-event-logs?limit=all`;
+      let url = api(`/api/bot-event-logs?limit=all`);
       url += `&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
       if (uid) url += `&uid=${encodeURIComponent(uid)}`;
       try {

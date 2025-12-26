@@ -112,6 +112,7 @@ const formatTradeData = (trade, index) => ({
 });
 
 const TableView =  ({ title, tradeData, clientData, activeSubReport, setActiveSubReport }) => {
+  const normalizedTitle = React.useMemo(() => title.replace(/\s+/g, "_").trim(), [title]);
   // Chart settings state, persisted to localStorage
   const [chartSettings, setChartSettings] = useState(() => {
     try {
@@ -160,6 +161,11 @@ const TableView =  ({ title, tradeData, clientData, activeSubReport, setActiveSu
   useEffect(() => {
     localStorage.setItem("reportFontSizeLevel", reportFontSizeLevel);
   }, [reportFontSizeLevel]);
+  // Column order (reorderable via settings) — global across all grid lists
+  const columnOrderKey = "tableColumnOrder_global";
+  const [columnOrder, setColumnOrder] = useState([]);
+  const [showColumnOrderDialog, setShowColumnOrderDialog] = useState(false);
+  const [draggingKey, setDraggingKey] = useState(null);
   // Optimized sub-report click handler
   const handleSubReportClick = useCallback((type, normalizedTitle) => {
     if (normalizedTitle === "Client_Stats") {
@@ -462,6 +468,47 @@ const filteredAndSortedData = useMemo(() => {
       : bVal.localeCompare(aVal);
   });
 }, [filteredData, sortConfig, activeFilters]);
+
+// Sync column order from data + localStorage (after filtered data exists)
+useEffect(() => {
+  if (!filteredAndSortedData.length) return;
+  const keys = Object.keys(filteredAndSortedData[0]);
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(columnOrderKey) || "[]");
+  } catch {
+    stored = [];
+  }
+  const cleaned = stored.filter((k) => keys.includes(k));
+  const missing = keys.filter((k) => !cleaned.includes(k));
+  const finalOrder = [...cleaned, ...missing];
+  if (finalOrder.join("|") !== columnOrder.join("|")) {
+    setColumnOrder(finalOrder);
+    localStorage.setItem(columnOrderKey, JSON.stringify(finalOrder));
+  }
+}, [filteredAndSortedData, columnOrderKey, columnOrder]);
+
+const handleColumnDragStart = (key) => setDraggingKey(key);
+const handleColumnDragOver = (e, targetKey) => {
+  e.preventDefault();
+  if (!draggingKey || draggingKey === targetKey) return;
+  setColumnOrder((prev) => {
+    const from = prev.indexOf(draggingKey);
+    const to = prev.indexOf(targetKey);
+    if (from === -1 || to === -1) return prev;
+    const updated = [...prev];
+    updated.splice(from, 1);
+    updated.splice(to, 0, draggingKey);
+    localStorage.setItem(columnOrderKey, JSON.stringify(updated));
+    return updated;
+  });
+};
+const resetColumnOrder = () => {
+  if (!filteredAndSortedData.length) return;
+  const keys = Object.keys(filteredAndSortedData[0]);
+  setColumnOrder(keys);
+  localStorage.setItem(columnOrderKey, JSON.stringify(keys));
+};
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
     return [...filteredData].sort((a, b) => {
@@ -652,7 +699,6 @@ useEffect(() => {
   // (Moved subReportButtons below to allow always showing buttons even if no data)
 
   // --- Sub-report filter button logic, always above early return for filteredData ---
-  const normalizedTitle = title.replace(/\s+/g, "_").trim();
   let options = [];
 
   switch (normalizedTitle) {
@@ -890,6 +936,14 @@ return (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5.582 9A7.978 7.978 0 014 12c0 4.418 3.582 8 8 8a7.978 7.978 0 006.418-3M15 9V4h5m-1.418 5A7.978 7.978 0 0020 12c0 4.418-3.582 8-8 8a7.978 7.978 0 01-6.418-3" /></svg>
           <span className="text-xs font-semibold">Reset</span>
         </button>
+        <button
+          onClick={() => setShowColumnOrderDialog(true)}
+          className="bg-gray-700 hover:bg-gray-800 focus:ring-2 focus:ring-gray-400 text-white p-2 rounded flex items-center justify-center gap-1 transition-all duration-150"
+          title="Reorder columns"
+        >
+          <span role="img" aria-label="settings">⚙️</span>
+          <span className="text-xs font-semibold hidden sm:inline">Columns</span>
+        </button>
         {selectedRow !== null && (() => {
           const selectedData = filteredAndSortedData[selectedRow] || {};
           const fieldsToDisplay = ["Stop_Price", "Save_Price", "Buy_Price", "Sell_Price"];
@@ -985,7 +1039,6 @@ return (
     {/* Search/Export/Reset group */}
   
 {(() => {
-  const normalizedTitle = title.replace(/\s+/g, "_").trim();
   let options = [];
 
   switch (normalizedTitle) {
@@ -1031,7 +1084,51 @@ return (
   
 
     {/* ✅ Table with Sorting */}
-    <div className="overflow-auto max-h-[600px] border border-gray-300 rounded-lg bg-[#f5ecd7] dark:bg-[#181a20]">
+    <div className="relative overflow-auto max-h-[600px] border border-gray-300 rounded-lg bg-[#f5ecd7] dark:bg-[#181a20]">
+      {showColumnOrderDialog && (
+        <div className="absolute z-40 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-xl p-4 w-64 mx-4 my-2">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-semibold text-gray-800 dark:text-gray-100">Column order</span>
+            <button
+              onClick={() => setShowColumnOrderDialog(false)}
+              className="text-sm px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              Close
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">Drag to rearrange. Applies immediately.</p>
+          <div className="space-y-2 max-h-64 overflow-auto">
+            {(columnOrder.length ? columnOrder : Object.keys(sortedData[0] || {})).map((key) => (
+              <div
+                key={key}
+                draggable
+                onDragStart={() => handleColumnDragStart(key)}
+                onDragOver={(e) => handleColumnDragOver(e, key)}
+                className={`flex items-center gap-2 px-2 py-1 border rounded cursor-move text-sm ${
+                  draggingKey === key ? "bg-yellow-100 dark:bg-yellow-900" : "bg-gray-50 dark:bg-gray-800"
+                }`}
+              >
+                <span className="opacity-70">☰</span>
+                <span className="text-gray-800 dark:text-gray-100 truncate">{key.replace(/_/g, " ")}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-3">
+            <button
+              className="text-xs px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+              onClick={() => setShowColumnOrderDialog(false)}
+            >
+              Done
+            </button>
+            <button
+              className="text-xs px-3 py-1 rounded bg-red-200 hover:bg-red-300 dark:bg-red-700 dark:hover:bg-red-600 text-red-900 dark:text-white"
+              onClick={resetColumnOrder}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
       <table
         className="w-full border-collapse"
         style={{ fontSize: `${12 + (reportFontSizeLevel - 3) * 2}px` }}
@@ -1042,7 +1139,7 @@ return (
           style={{ fontSize: "inherit" }}
         >
           <tr>
-            {Object.keys(sortedData[0] || {}).map((key, index) => {
+            {(columnOrder.length ? columnOrder : Object.keys(sortedData[0] || {})).map((key, index) => {
               const isSticky = index < 4; // Updated to include copy column
               const isCopyColumn = key === "📋";
               return (
@@ -1112,8 +1209,9 @@ return (
                 style={{ fontSize: `${12 + (reportFontSizeLevel - 3) * 2}px` }}
                 onClick={() => setSelectedRow(prev => prev === rowIndex ? null : rowIndex)}
               >
-                {Object.entries(item).map(([key, val], colIndex) =>
-                  key === "Pair" ? (
+                {(columnOrder.length ? columnOrder : Object.keys(item)).map((key, colIndex) => {
+                  const val = item[key];
+                  return key === "Pair" ? (
                     <td
                       key={colIndex}
                       className={`
@@ -1192,7 +1290,6 @@ return (
                         `}
                         style={{ fontSize: "inherit" }}
                       >
-                        {/* Removed log path opening functionality, just show plain text */}
                         {val}
                       </td>
                     ) : (
@@ -1256,8 +1353,8 @@ return (
                         )}
                       </td>
                     )
-                  )
-                )}
+                  );
+                })}
               </tr>
             ))}
         </tbody>
