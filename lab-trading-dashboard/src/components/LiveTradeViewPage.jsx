@@ -356,6 +356,8 @@ const LiveTradeViewPage = () => {
       .replace(/([a-z])([A-Z])/g, '$1 $2')
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
+  const displayIntervalLabel = (interval) => interval === 'json_message' ? '' : interval;
+
   // Helper function to format cell value
   const formatCellValue = (value, fieldName, { forTooltip = false } = {}) => {
     if (value == null || value === '') return '';
@@ -969,18 +971,24 @@ const LiveTradeViewPage = () => {
         });
       }
 
-      // Also pull top-level JSON message keys into a synthetic interval so they appear as labels
+      // Pull top-level JSON keys into a synthetic interval so they stay selectable
       Object.keys(json || {}).forEach(key => {
         if (!labelMap[key]) labelMap[key] = new Set();
         labelMap[key].add('json_message');
         intervalSet.add('json_message');
       });
+
     });
 
     const allIntervals = Array.from(intervalSet).sort((a, b) => {
       // Custom sort: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 1d
       const order = ["1m","3m","5m","15m","30m","1h","2h","4h","1d"];
-      return order.indexOf(a) - order.indexOf(b);
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
     });
 
     return Object.entries(labelMap).map(([label, intervals]) => ({
@@ -1551,7 +1559,10 @@ const LiveTradeViewPage = () => {
           json = row.json_message || {};
         }
       } catch { json = {}; }
-      const allRows = json?.signal_data?.all_last_rows || {};
+      const allRows = {
+        ...(json?.signal_data?.all_last_rows || {}),
+        json_message: json && typeof json === 'object' && !Array.isArray(json) ? json : {}
+      };
       return allRows[interval]?.[parentKey];
     }
     return undefined;
@@ -1563,6 +1574,8 @@ const LiveTradeViewPage = () => {
     return [...rows].sort((a, b) => {
       let aVal = extractSortValue(a, sortKey);
       let bVal = extractSortValue(b, sortKey);
+      if (typeof aVal === 'object') aVal = JSON.stringify(aVal);
+      if (typeof bVal === 'object') bVal = JSON.stringify(bVal);
       // Special handling for date/time fields in regular columns
       if (sortKey.type === 'regular' && isDateField(sortKey.key)) {
         const aDate = new Date(aVal);
@@ -1721,6 +1734,16 @@ const LiveTradeViewPage = () => {
   const [wholeLogsLoading, setWholeLogsLoading] = useState(false);
   const [wholeSortKey, setWholeSortKey] = useState('timestamp');
   const [wholeSortDirection, setWholeSortDirection] = useState('desc');
+
+  // Memoize current table data and sorted view so header clicks immediately reorder rows
+  const currentTableData = useMemo(
+    () => (wholeLogs.length > 0 ? wholeLogs : filteredLogs),
+    [wholeLogs, filteredLogs]
+  );
+  const sortedTableData = useMemo(
+    () => getSortedRows(currentTableData),
+    [currentTableData, sortKey, sortDirection]
+  );
 
   // --- Fetch logs in Whole Data mode ---
   useEffect(() => {
@@ -2933,32 +2956,22 @@ const LiveTradeViewPage = () => {
           }} title={interval}
                           onClick={() => handleHeaderClick('json', interval, item.value, interval)}>
                           <div className="flex items-center justify-between">
-                            <span>{interval}</span>
+                            <span>{displayIntervalLabel(interval)}</span>
                             <span className="ml-1 opacity-60">
                               {sortKey && sortKey.type === 'json' && sortKey.parentKey === item.value && sortKey.interval === interval ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
                             </span>
                           </div>
                         </th>
                       ));
-                    }
-                    return null;
-                  })}
+        }
+        return null;
+      })}
                   {/* No extra row for regular or trade columns */}
                 </tr>
               </thead>
               <tbody>
                 {(() => {
-                  // Use wholeLogs if available, otherwise use filteredLogs
-                  const currentData = wholeLogs.length > 0 ? wholeLogs : filteredLogs;
-                  const sortedRows = getSortedRows(currentData);
-  
-  // TEMP DEBUG: Show filtered logs and sorting info
-
-  
-  // Check if filtering is removing all logs
-
-
-                  return sortedRows.map((row, idx) => {
+                  return sortedTableData.map((row, idx) => {
                     // Use parsed_json_message first, fallback to json_message/json_data
                     let json = null;
                     if (row.parsed_json_message && typeof row.parsed_json_message === 'object') {
@@ -2982,7 +2995,6 @@ const LiveTradeViewPage = () => {
                         }
                       } catch { json = {}; }
                     }
-                    // Merge signal_data intervals plus top-level json_message keys into a synthetic interval
                     const allRows = {
                       ...(json?.signal_data?.all_last_rows || {}),
                       json_message: json && typeof json === 'object' && !Array.isArray(json) ? json : {}

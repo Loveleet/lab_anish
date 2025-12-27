@@ -292,44 +292,62 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       const emaJson = emaRes.ok ? await emaRes.json() : null;
       setEmaTrends(emaJson);
 
-      setMachines(machinesList);
+      // Build unified machine list (machines endpoint + trades machine ids)
+      const tradeMachineIds = Array.from(
+        new Set(trades.map(t => toMachineKey(t.machineid)).filter(Boolean))
+      ).map(id => ({ machineid: id, active: true }));
+      const unifiedMachines = [
+        ...machinesList,
+        ...tradeMachineIds.filter(tm => !machinesList.some(m => toMachineKey(m.machineid) === tm.machineid))
+      ];
+
+      setMachines(unifiedMachines);
       setTradeData(trades);
       setLogData(logs);
-      setClientData(machinesList);
+      setClientData(unifiedMachines);
 
-      if (Object.keys(selectedMachines).length === 0) {
-        const savedMachines = localStorage.getItem("selectedMachines");
-        if (savedMachines) {
-          setSelectedMachines(JSON.parse(savedMachines));
-        } else {
-          const activeMachines = machinesList.reduce((acc, machine) => {
-            const key = toMachineKey(machine.machineid);
-            // Default select active machines; keep inactive visible but unselected
-            acc[key] = !!machine.active;
-            return acc;
-          }, {});
-          setSelectedMachines(activeMachines);
-          localStorage.setItem("selectedMachines", JSON.stringify(activeMachines));
-        }
-      }
+      // Always select ALL machines (ignore active status) so every machine’s trades show
+      const allMachinesSelected = unifiedMachines.reduce((acc, machine) => {
+        const key = toMachineKey(machine.machineid);
+        if (key) acc[key] = true;
+        return acc;
+      }, {});
+      setSelectedMachines(allMachinesSelected);
+      localStorage.setItem("selectedMachines", JSON.stringify(allMachinesSelected));
+
+      // Debug: log machine coverage
+      const countsByMachine = trades.reduce((acc, t) => {
+        const k = toMachineKey(t.machineid) || "unknown";
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+      }, {});
+      console.log("[DEBUG] Machines from API:", machinesList.map(m => toMachineKey(m.machineid)));
+      console.log("[DEBUG] Machines from trades:", tradeMachineIds);
+      console.log("[DEBUG] Counts by machine from trades:", countsByMachine);
+      console.log("[DEBUG] Selected machines:", allMachinesSelected);
     } catch (error) {
       setTradeData([]);
     }
-  }, [selectedMachines]);
+  }, [toMachineKey]);
 
   useEffect(() => {
     refreshAllData();
   }, [refreshAllData]);
+
+  // Debug: log machine coverage and trade counts (raw vs filtered)
 const filteredTradeData = useMemo(() => {
   if (!Array.isArray(tradeData)) return [];
+  const isSelected = (map, key) => {
+    return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : true; // default allow unknown keys
+  };
  
   return tradeData.filter(trade => {
 
     if (!includeMinClose && trade.min_close === "Min_close") return false;
-    const isSignalSelected = selectedSignals[trade.signalfrom];
-    const isMachineSelected = selectedMachines[toMachineKey(trade.machineid)];
-    const isIntervalSelected = selectedIntervals[trade.interval];
-    const isActionSelected = selectedActions[trade.action];
+    const isSignalSelected = isSelected(selectedSignals, trade.signalfrom);
+    const isMachineSelected = isSelected(selectedMachines, toMachineKey(trade.machineid));
+    const isIntervalSelected = isSelected(selectedIntervals, trade.interval);
+    const isActionSelected = isSelected(selectedActions, trade.action);
 
     // ✅ Handle missing or malformed Candle time
     if (!trade.candel_time) return false;
@@ -344,6 +362,31 @@ const filteredTradeData = useMemo(() => {
   });
   // console.log('[App.jsx] filteredTradeData:', filteredTradeData);
 }, [tradeData, selectedSignals, selectedMachines, selectedIntervals, selectedActions, fromDate, toDate, includeMinClose, fontSizeLevel]);
+
+// Debug: log machine coverage and trade counts (raw vs filtered)
+useEffect(() => {
+  if (!machines.length && !tradeData.length) return;
+  const uniqueIntervals = Array.from(new Set(tradeData.map(t => t.interval)));
+  const uniqueSignals = Array.from(new Set(tradeData.map(t => t.signalfrom)));
+  const uniqueActions = Array.from(new Set(tradeData.map(t => t.action)));
+  const countsRaw = tradeData.reduce((acc, t) => {
+    const k = toMachineKey(t.machineid) || "unknown";
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const countsFiltered = filteredTradeData.reduce((acc, t) => {
+    const k = toMachineKey(t.machineid) || "unknown";
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  console.log("[DEBUG][Machines] API machines:", machines.map(m => toMachineKey(m.machineid)));
+  console.log("[DEBUG][Machines] Selected map:", selectedMachines);
+  console.log("[DEBUG][Trades] Raw counts by machine:", countsRaw);
+  console.log("[DEBUG][Trades] Filtered counts by machine:", countsFiltered);
+  console.log("[DEBUG][Trades] Unique intervals:", uniqueIntervals);
+  console.log("[DEBUG][Trades] Unique signals:", uniqueSignals);
+  console.log("[DEBUG][Trades] Unique actions:", uniqueActions);
+}, [machines, tradeData, filteredTradeData, selectedMachines, toMachineKey]);
 
 const getFilteredForTitle = useMemo(() => {
   const memo = {};
