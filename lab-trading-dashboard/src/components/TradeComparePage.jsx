@@ -43,8 +43,9 @@ const minutesDiff = (a, b) => {
 };
 
 const percentDiff = (base, compare) => {
-  if (base === null || compare === null || base === 0) return null;
-  return Math.abs((compare - base) / base) * 100;
+  if (base === null || compare === null) return null;
+  const denom = Math.max(Math.abs(base), Math.abs(compare), 1e-9);
+  return Math.abs((compare - base) / denom) * 100;
 };
 
 const statusFromCloseTime = (trade) => {
@@ -329,12 +330,12 @@ const TradeComparePage = () => {
   }, [machines, trades]);
 
   const filteredTrades = useMemo(() => {
-    const from = fromDate ? moment(fromDate).startOf("day") : null;
-    const to = toDate ? moment(toDate).endOf("day") : null;
+    const from = fromDate ? moment.utc(fromDate).startOf("day") : null;
+    const to = toDate ? moment.utc(toDate).endOf("day") : null;
     return trades.filter((t) => {
       const candle = t?.candel_time || t?.candle_time;
       if (!candle) return false;
-      const mCandle = moment(candle);
+      const mCandle = moment.utc(candle);
       if (from && mCandle.isBefore(from)) return false;
       if (to && mCandle.isAfter(to)) return false;
       return true;
@@ -556,6 +557,11 @@ const TradeComparePage = () => {
           return (row.backendList.map((t) => t.machineid).join(",") || "").toLowerCase();
         case "live":
           return (row.liveList.map((t) => t.machineid).join(",") || "").toLowerCase();
+        case "action": {
+          const ba = (row.backendTrade?.action || "").toLowerCase();
+          const la = (row.liveTrade?.action || "").toLowerCase();
+          return `${ba}-${la}`;
+        }
         case "status":
           return `${row.backendStatus}-${row.liveStatus}`;
         case "drawdown": {
@@ -874,6 +880,11 @@ const TradeComparePage = () => {
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
+                    <button className="flex items-center gap-1" onClick={() => setSort("action")}>
+                      Action {sortConfig.key === "action" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-left">
                     <button className="flex items-center gap-1" onClick={() => setSort("fetcher")}>
                       Fetcher Δ {sortConfig.key === "fetcher" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
                     </button>
@@ -1013,11 +1024,17 @@ const TradeComparePage = () => {
                       <div className="text-xs text-gray-700 dark:text-gray-200">Machines: {row.backendList.map((t) => t.machineid).join(", ") || "—"}</div>
                       <div className="text-xs">Status: {row.backendStatus}</div>
                       <div className="text-xs">Fetcher: {getFetcherTime(row.backendTrade) || "—"}</div>
+                      <div className="text-xs">Price: {getActionPrice(row.backendTrade) ?? "—"}</div>
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-xs text-gray-700 dark:text-gray-200">Machines: {row.liveList.map((t) => t.machineid).join(", ") || "—"}</div>
                       <div className="text-xs">Status: {row.liveStatus}</div>
                       <div className="text-xs">Fetcher: {getFetcherTime(row.liveTrade) || "—"}</div>
+                      <div className="text-xs">Price: {getActionPrice(row.liveTrade) ?? "—"}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div>Backend: {row.backendTrade?.action || "—"}</div>
+                      <div>Live: {row.liveTrade?.action || "—"}</div>
                     </td>
                     <td className="px-3 py-2">{fetcherCell}</td>
                     <td className={`px-3 py-2 ${priceClass}`}>{priceCell}</td>
@@ -1208,11 +1225,11 @@ const TradeComparePage = () => {
                               <thead className="sticky top-0 bg-gray-800 text-white dark:bg-gray-200 dark:text-black">
                                 <tr>
                                   <th className="px-2 py-1 text-left">Side</th>
-                                  {order.map((col) => (
-                                    <th key={col} className="px-2 py-1 text-left">{col}</th>
-                                  ))}
-                                </tr>
-                              </thead>
+                    {order.map((col) => (
+                      <th key={col} className="px-2 py-1 text-left">{col}</th>
+                    ))}
+                  </tr>
+                </thead>
                               <tbody>
                                 {[
                                   { title: "Backend", trade: row.backendTrade },
