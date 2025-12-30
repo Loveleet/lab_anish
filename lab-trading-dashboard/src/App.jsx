@@ -17,6 +17,7 @@ import LiveTradeViewPage from './components/LiveTradeViewPage';
 import GroupViewPage from './pages/GroupViewPage';
 import RefreshControls from './components/RefreshControls';
 import SuperTrendPanel from "./SuperTrendPanel";
+import TradeComparePage from "./components/TradeComparePage";
 
 // Helper to get API base URL
 const API_BASE_URL =
@@ -245,6 +246,15 @@ const [selectedActions, setSelectedActions] = useState({
   BUY: true,
   SELL: true,
 });
+const [filterVisible, setFilterVisible] = useState(() => {
+  const saved = localStorage.getItem("filterVisible");
+  if (saved === "false") return false;
+  return true;
+});
+
+useEffect(() => {
+  localStorage.setItem("filterVisible", filterVisible ? "true" : "false");
+}, [filterVisible]);
 
 // Sync selectedActions when actionRadioMode changes (radio-mode behavior)
 useEffect(() => {
@@ -1110,6 +1120,7 @@ useEffect(() => {
         <Route path="/reports/list" element={<ListViewPage />} />
         <Route path="/live-trade-view" element={<LiveTradeViewPage />} />
         <Route path="/pages/group-view" element={<GroupViewPage />} />
+        <Route path="/trades" element={<TradeComparePage />} />
         {/* <Route path="/settings" element={<SettingsPage />} /> */}
         <Route path="/*" element={
           <>
@@ -1153,39 +1164,48 @@ useEffect(() => {
               <div className={`flex-1 min-h-screen transition-all duration-300 ${isSidebarOpen ? "ml-64" : "ml-20"} overflow-hidden relative bg-[#f5f6fa] dark:bg-black`}>
                 {/* Main content area, no extra margin-top */}
                 <div className="p-8 pt-2 overflow-x-auto">
-                  {/* <h2 className="text-2xl font-semibold text-white mb-0">Trade Filter (MODULAR)</h2> */}
-                  <TradeFilterPanel
-                    selectedSignals={selectedSignals}
-                    setSelectedSignals={setSelectedSignals}
-                    selectedMachines={selectedMachines}
-                    setSelectedMachines={setSelectedMachines}
-                    selectedIntervals={selectedIntervals}
-                    setSelectedIntervals={setSelectedIntervals}
-                    selectedActions={selectedActions}
-                    setSelectedActions={setSelectedActions}
-                    fromDate={fromDate}
-                    toDate={toDate}
-                    setFromDate={setFromDate}
-                    setToDate={setToDate}
-                    includeMinClose={includeMinClose}
-                    setIncludeMinClose={setIncludeMinClose}
-                    signalRadioMode={signalRadioMode}
-                    setSignalRadioMode={setSignalRadioMode}
-                    machineRadioMode={machineRadioMode}
-                    setMachineRadioMode={setMachineRadioMode}
-                    intervalRadioMode={intervalRadioMode}
-                    setIntervalRadioMode={setIntervalRadioMode}
-                    actionRadioMode={actionRadioMode}
-                    setActionRadioMode={setActionRadioMode}
-                    signalToggleAll={signalToggleAll}
-                    setSignalToggleAll={setSignalToggleAll}
-                    machineToggleAll={machineToggleAll}
-                    setMachineToggleAll={setMachineToggleAll}
-                    machines={machines}
-                    dateKey={dateKey}
-                    setDateKey={setDateKey}
-                    assignedCount={getFilteredForTitle["Assigned_New"]?.length || 0}
-                  />
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={() => setFilterVisible((v) => !v)}
+                      className="text-xs px-3 py-1 rounded-full bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-300 dark:hover:bg-gray-700 shadow"
+                    >
+                      {filterVisible ? "Hide Filters" : "Show Filters"}
+                    </button>
+                  </div>
+                  {filterVisible && (
+                    <TradeFilterPanel
+                      selectedSignals={selectedSignals}
+                      setSelectedSignals={setSelectedSignals}
+                      selectedMachines={selectedMachines}
+                      setSelectedMachines={setSelectedMachines}
+                      selectedIntervals={selectedIntervals}
+                      setSelectedIntervals={setSelectedIntervals}
+                      selectedActions={selectedActions}
+                      setSelectedActions={setSelectedActions}
+                      fromDate={fromDate}
+                      toDate={toDate}
+                      setFromDate={setFromDate}
+                      setToDate={setToDate}
+                      includeMinClose={includeMinClose}
+                      setIncludeMinClose={setIncludeMinClose}
+                      signalRadioMode={signalRadioMode}
+                      setSignalRadioMode={setSignalRadioMode}
+                      machineRadioMode={machineRadioMode}
+                      setMachineRadioMode={setMachineRadioMode}
+                      intervalRadioMode={intervalRadioMode}
+                      setIntervalRadioMode={setIntervalRadioMode}
+                      actionRadioMode={actionRadioMode}
+                      setActionRadioMode={setActionRadioMode}
+                      signalToggleAll={signalToggleAll}
+                      setSignalToggleAll={setSignalToggleAll}
+                      machineToggleAll={machineToggleAll}
+                      setMachineToggleAll={setMachineToggleAll}
+                      machines={machines}
+                      dateKey={dateKey}
+                      setDateKey={setDateKey}
+                      assignedCount={getFilteredForTitle["Assigned_New"]?.length || 0}
+                    />
+                  )}
         <div className="flex flex-wrap items-start gap-3 ml-0 md:ml-6">
   {/* Controls block */}
   <div className="flex items-center gap-3 flex-none">

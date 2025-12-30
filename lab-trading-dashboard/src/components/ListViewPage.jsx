@@ -2028,7 +2028,6 @@ const ListViewPage = () => {
               margin: '0 auto',
               boxSizing: 'border-box',
               resize: 'none', // disable native resize, use custom
-              overflow: 'auto',
               cursor: dragging ? 'move' : 'default',
               opacity: settingsOpen ? 1 : 0,
               transform: settingsOpen ? 'scale(1)' : 'scale(0.96)',

@@ -1210,7 +1210,8 @@ return (
                 onClick={() => setSelectedRow(prev => prev === rowIndex ? null : rowIndex)}
               >
                 {(columnOrder.length ? columnOrder : Object.keys(item)).map((key, colIndex) => {
-                  const val = item[key];
+                  const rawVal = item[key];
+                  const val = typeof rawVal === "string" ? rawVal : rawVal != null ? String(rawVal) : "";
                   return key === "Pair" ? (
                     <td
                       key={colIndex}
