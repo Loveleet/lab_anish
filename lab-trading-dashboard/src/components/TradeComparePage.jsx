@@ -122,7 +122,14 @@ const TradeComparePage = () => {
     }
   });
   const [showIssuesOnly, setShowIssuesOnly] = useState(() => localStorage.getItem("tc_showIssuesOnly") === "true");
-  const [quickFilter, setQuickFilter] = useState(() => localStorage.getItem("tc_quickFilter") || "all");
+  const [quickFilters, setQuickFilters] = useState(() => {
+    try {
+      const saved = localStorage.getItem("tc_quickFilters");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [sortConfig, setSortConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("tc_sortConfig");
@@ -251,8 +258,8 @@ const TradeComparePage = () => {
   }, [showIssuesOnly]);
 
   useEffect(() => {
-    localStorage.setItem("tc_quickFilter", quickFilter);
-  }, [quickFilter]);
+    localStorage.setItem("tc_quickFilters", JSON.stringify(quickFilters));
+  }, [quickFilters]);
 
   useEffect(() => {
     localStorage.setItem("tc_sortConfig", JSON.stringify(sortConfig));
@@ -515,39 +522,41 @@ const TradeComparePage = () => {
 
   const filteredComparisons = useMemo(() => {
     const base = showIssuesOnly ? comparisons.filter((row) => row.issues && row.issues.length) : comparisons;
-    switch (quickFilter) {
-      case "backendMissing":
-        return base.filter((r) => r.liveList.length === 0);
-      case "liveExtra":
-        return base.filter((r) => r.backendList.length === 0);
-      case "lateFetch":
-        return base.filter((r) => Number.isFinite(r.fetcherDiff) && r.fetcherDiff > 5);
-      case "priceGap":
-        return base.filter((r) => Number.isFinite(r.priceDeltaPct) && r.priceDeltaPct > 15);
-      case "closureMismatch":
-        return base.filter(
-          (r) =>
+    if (!quickFilters || quickFilters.length === 0) return base;
+    const matches = (r, key) => {
+      switch (key) {
+        case "backendMissing":
+          return r.liveList.length === 0;
+        case "liveExtra":
+          return r.backendList.length === 0;
+        case "lateFetch":
+          return Number.isFinite(r.fetcherDiff) && r.fetcherDiff > 5;
+        case "priceGap":
+          return Number.isFinite(r.priceDeltaPct) && r.priceDeltaPct > 15;
+        case "closureMismatch":
+          return (
             (r.backendStatus === "closed" && r.liveStatus === "running") ||
             (r.backendStatus === "running" && r.liveStatus === "closed")
-        );
-      case "closureGap":
-        return base.filter(
-          (r) =>
+          );
+        case "closureGap":
+          return (
             Number.isFinite(r.closeTimeDiff) &&
             r.closeTimeDiff > 16 &&
             Number.isFinite(r.closePriceDelta) &&
             r.closePriceDelta > 15
-        );
-      case "plDrop":
-        return base.filter((r) => rowDetails[r.key]?.issue);
-      case "totalBackend":
-        return base.filter((r) => r.backendList.length > 0);
-      case "totalLive":
-        return base.filter((r) => r.liveList.length > 0);
-      default:
-        return base;
-    }
-  }, [comparisons, showIssuesOnly, quickFilter, rowDetails]);
+          );
+        case "plDrop":
+          return !!rowDetails[r.key]?.issue;
+        case "totalBackend":
+          return r.backendList.length > 0;
+        case "totalLive":
+          return r.liveList.length > 0;
+        default:
+          return false;
+      }
+    };
+    return base.filter((r) => quickFilters.some((key) => matches(r, key)));
+  }, [comparisons, showIssuesOnly, quickFilters, rowDetails]);
 
   const dropIssueCount = useMemo(
     () => comparisons.filter((row) => rowDetails[row.key]?.issue).length,
@@ -812,11 +821,15 @@ const TradeComparePage = () => {
                 "bg-gradient-to-br from-slate-600/80 via-slate-500/80 to-gray-500/80 text-white"
               ];
               const tint = palette[idx % palette.length];
-              const isActive = quickFilter === item.key;
+              const isActive = quickFilters.includes(item.key);
               return (
                 <button
                   key={item.key}
-                  onClick={() => setQuickFilter(item.key)}
+                  onClick={() =>
+                    setQuickFilters((prev) =>
+                      prev.includes(item.key) ? prev.filter((k) => k !== item.key) : [...prev, item.key]
+                    )
+                  }
                   className={`text-left h-full w-full transition-all rounded-lg shadow-md ${
                     isActive
                       ? "ring-2 ring-white/70 dark:ring-cyan-300 scale-[1.01]"
@@ -831,11 +844,11 @@ const TradeComparePage = () => {
                 </button>
               );
             })}
-          </div>
-          <div className="flex justify-end mt-1">
-            <button onClick={() => setQuickFilter("all")} className="text-sm text-blue-600 underline">
-              Show all
-            </button>
+            <div className="flex items-center">
+              <button onClick={() => setQuickFilters([])} className="text-sm text-blue-200 underline">
+                Show all
+              </button>
+            </div>
           </div>
         </div>
       </div>
