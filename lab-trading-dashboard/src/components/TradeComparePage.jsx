@@ -9,9 +9,10 @@ const API_BASE_URL =
     : "";
 
 const toKey = (trade) => {
-  const symbol = trade?.pair || trade?.symbol || trade?.PAIR || "";
-  const candle = trade?.candel_time || trade?.candle_time || trade?.Candle_time || "";
-  return `${symbol}__${candle}`;
+  const symbol = (trade?.pair || trade?.symbol || trade?.PAIR || "").toString().trim().toUpperCase();
+  const candleRaw = trade?.candel_time || trade?.candle_time || trade?.Candle_time || "";
+  const candleIso = candleRaw ? moment.utc(candleRaw).toISOString() : "";
+  return `${symbol}__${candleIso}`;
 };
 
 const parseNumber = (value) => {
@@ -33,7 +34,12 @@ const getActionPrice = (trade) => {
 const getClosePrice = (trade) => parseNumber(trade?.close_price ?? trade?.Close_Price ?? trade?.price);
 
 const getFetcherTime = (trade) => trade?.fetcher_trade_time || trade?.fetcher_time || trade?.Fetcher_time;
-const getCloseTime = (trade) => trade?.operator_close_time || trade?.close_time || trade?.Operator_close_time;
+const getCloseTime = (trade) =>
+  trade?.operator_close_time ||
+  trade?.close_time ||
+  trade?.Operator_close_time ||
+  trade?.["Operator_🕒❌"] ||
+  trade?.operatorCloseTime;
 
 const minutesDiff = (a, b) => {
   const ma = moment(a);
@@ -291,24 +297,37 @@ const TradeComparePage = () => {
         // Compute post-$20 peak and drawdown
         let crossed = false;
         let peak = null;
+        let peakAt = null;
         let issue = null;
+        let recovered = null;
         parsed.forEach((entry) => {
           if (entry.pl === null) return;
           if (!crossed && entry.pl > 20) {
             crossed = true;
             peak = entry.pl;
-          } else if (crossed) {
-            if (entry.pl > peak) peak = entry.pl;
-            const dropPct = peak ? ((peak - entry.pl) / peak) * 100 : 0;
-            if (!issue && dropPct > 15) {
-              issue = { dropPct, peak, at: entry.ts, value: entry.pl };
-            }
+            peakAt = entry.ts;
+            return;
+          }
+          if (!crossed) return;
+
+          if (entry.pl > peak) {
+            peak = entry.pl;
+            peakAt = entry.ts;
+            issue = null; // clear any prior drop
+            recovered = { peak, at: peakAt };
+            return;
+          }
+
+          const dropPct = peak ? ((peak - entry.pl) / peak) * 100 : 0;
+          if (!issue && dropPct > 20) {
+            issue = { dropPct, peak, at: entry.ts, value: entry.pl };
+            recovered = null;
           }
         });
 
         setRowDetails((prev) => ({
           ...prev,
-          [row.key]: { logs: parsed, issue, loaded: true }
+          [row.key]: { logs: parsed, issue, recovered, loaded: true }
         }));
       } catch (e) {
         setRowDetails((prev) => ({ ...prev, [row.key]: { error: e.message || "Failed to load logs" } }));
@@ -344,11 +363,7 @@ const TradeComparePage = () => {
 
   const backendTrades = useMemo(() => {
     const backendSet = new Set(backendMachines.map(String));
-    return filteredTrades.filter(
-      (t) =>
-        backendSet.has((t.machineid || t.machine_id || "").toString()) &&
-        (t.type === "assign" || t.type === "Assigned_New" || t.type === "Assigned" || t.type === "assign_new")
-    );
+    return filteredTrades.filter((t) => backendSet.has((t.machineid || t.machine_id || "").toString()));
   }, [filteredTrades, backendMachines]);
 
   const liveTrades = useMemo(() => {
@@ -395,11 +410,16 @@ const TradeComparePage = () => {
 
       const backendStatus = statusFromCloseTime(backendTrade);
       const liveStatus = statusFromCloseTime(liveTrade);
+      const backendClosePrice = getClosePrice(backendTrade);
+      const liveClosePrice = getClosePrice(liveTrade);
       const closeTimeDiff = backendStatus === "closed" && liveStatus === "closed"
         ? minutesDiff(getCloseTime(backendTrade), getCloseTime(liveTrade))
         : null;
-      const closePriceDelta = backendStatus === "closed" && liveStatus === "closed"
-        ? percentDiff(getClosePrice(backendTrade), getClosePrice(liveTrade))
+      const closePriceDelta = backendStatus === "closed" && liveStatus === "closed" && backendClosePrice !== null && liveClosePrice !== null
+        ? (() => {
+            const denom = (Math.abs(liveClosePrice) + Math.abs(backendClosePrice)) / 2 || 1e-9;
+            return Math.abs(liveClosePrice - backendClosePrice) / denom * 100;
+          })()
         : null;
 
       const issues = [];
@@ -713,18 +733,18 @@ const TradeComparePage = () => {
               <label className="flex flex-col gap-1">
                 <span className="font-semibold">From</span>
                 <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
+                  type="datetime-local"
+                  value={fromDate ? moment.utc(fromDate).format("YYYY-MM-DDTHH:mm") : ""}
+                  onChange={(e) => setFromDate(e.target.value ? moment.utc(e.target.value).toISOString() : "")}
                   className="h-8 border rounded px-2 bg-white text-black dark:bg-gray-800 dark:text-white dark:border-gray-700"
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="font-semibold">To</span>
                 <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
+                  type="datetime-local"
+                  value={toDate ? moment.utc(toDate).format("YYYY-MM-DDTHH:mm") : ""}
+                  onChange={(e) => setToDate(e.target.value ? moment.utc(e.target.value).toISOString() : "")}
                   className="h-8 border rounded px-2 bg-white text-black dark:bg-gray-800 dark:text-white dark:border-gray-700"
                 />
               </label>
@@ -944,13 +964,36 @@ const TradeComparePage = () => {
                 ? `${row.investmentDeltaPct.toFixed(1)}%`
                 : "—";
               const investmentClass = severityTint(row.investmentDeltaPct);
-              const closeCell =
-                !Number.isFinite(row.closeTimeDiff) && !Number.isFinite(row.closePriceDelta)
-                  ? "—"
-                  : `${Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : ""} ${
-                      Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : ""
-                    }`.trim();
-              const closeClass = severityTint(row.closePriceDelta);
+              const livePl = parseNumber(row.liveTrade?.pl_after_comm);
+              const backendPl = parseNumber(row.backendTrade?.pl_after_comm);
+              const plDiff = livePl !== null && backendPl !== null ? livePl - backendPl : null;
+              const plDiffPct =
+                livePl !== null && backendPl !== null && backendPl !== 0
+                  ? ((livePl - backendPl) / Math.abs(backendPl)) * 100
+                  : null;
+
+              const timeLabel = Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : "—";
+              const priceLabel = Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : "—";
+              const plLabel =
+                livePl !== null && backendPl !== null
+                  ? `PL L:${livePl.toFixed(2)} / B:${backendPl.toFixed(2)} (Δ $${plDiff?.toFixed(2)} ${plDiffPct !== null ? `${plDiffPct.toFixed(1)}%` : ""})`
+                  : "PL: —";
+
+              const closeCell = (
+                <div className="space-y-0.5 text-xs">
+                  <div>Time: {timeLabel}</div>
+                  <div>Price: {priceLabel}</div>
+                  <div>{plLabel}</div>
+                </div>
+              );
+
+              const closeClass = (() => {
+                if (plDiff !== null) {
+                  if (plDiff > 0) return "bg-green-200 text-green-900";
+                  if (plDiff < 0) return "bg-red-200 text-red-900";
+                }
+                return severityTint(row.closePriceDelta);
+              })();
               return (
                 <React.Fragment key={row.key}>
                   <tr
@@ -1052,7 +1095,14 @@ const TradeComparePage = () => {
                         {rowDetails[row.key].issue.peak?.toFixed(2)} at {rowDetails[row.key].issue.at}
                       </span>
                     )}
-                    {!rowDetails[row.key]?.loading && !rowDetails[row.key]?.issue && <span className="text-green-500">OK</span>}
+                    {!rowDetails[row.key]?.loading && !rowDetails[row.key]?.issue && rowDetails[row.key]?.recovered && (
+                      <span className="text-green-500 font-semibold">
+                        ✅ Recovered to ${rowDetails[row.key].recovered.peak?.toFixed(2)} at {rowDetails[row.key].recovered.at}
+                      </span>
+                    )}
+                    {!rowDetails[row.key]?.loading && !rowDetails[row.key]?.issue && !rowDetails[row.key]?.recovered && (
+                      <span className="text-green-500">OK</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-1">
