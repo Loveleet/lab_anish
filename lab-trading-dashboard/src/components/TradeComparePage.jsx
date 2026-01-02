@@ -12,7 +12,15 @@ const toKey = (trade) => {
   const symbol = (trade?.pair || trade?.symbol || trade?.PAIR || "").toString().trim().toUpperCase();
   const candleRaw = trade?.candel_time || trade?.candle_time || trade?.Candle_time || "";
   const candleIso = candleRaw ? moment.utc(candleRaw).toISOString() : "";
-  return `${symbol}__${candleIso}`;
+  // Bucket candle to 4-hour windows so that close times within 4h are matched
+  const bucketed = candleRaw
+    ? moment
+        .utc(candleRaw)
+        .startOf("hour")
+        .subtract(moment.utc(candleRaw).hour() % 4, "hours")
+        .toISOString()
+    : candleIso;
+  return `${symbol}__${bucketed}`;
 };
 
 const parseNumber = (value) => {
@@ -378,129 +386,163 @@ const TradeComparePage = () => {
     return filteredTrades.filter((t) => liveSet.has((t.machineid || t.machine_id || "").toString()));
   }, [filteredTrades, liveMachines]);
 
-  const backendByKey = useMemo(() => {
+  const backendBySymbol = useMemo(() => {
     const map = new Map();
     backendTrades.forEach((t) => {
-      const key = toKey(t);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(t);
+      const sym = (t.pair || t.symbol || t.PAIR || "").toString().trim().toUpperCase();
+      if (!map.has(sym)) map.set(sym, []);
+      map.get(sym).push(t);
     });
+    map.forEach((list) => list.sort((a, b) => moment.utc(a.candel_time || a.candle_time).valueOf() - moment.utc(b.candel_time || b.candle_time).valueOf()));
     return map;
   }, [backendTrades]);
 
-  const liveByKey = useMemo(() => {
+  const liveBySymbol = useMemo(() => {
     const map = new Map();
     liveTrades.forEach((t) => {
-      const key = toKey(t);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(t);
+      const sym = (t.pair || t.symbol || t.PAIR || "").toString().trim().toUpperCase();
+      if (!map.has(sym)) map.set(sym, []);
+      map.get(sym).push(t);
     });
+    map.forEach((list) => list.sort((a, b) => moment.utc(a.candel_time || a.candle_time).valueOf() - moment.utc(b.candel_time || b.candle_time).valueOf()));
     return map;
   }, [liveTrades]);
 
   const comparisons = useMemo(() => {
     const rows = [];
-    const matchedKeys = new Set([...backendByKey.keys()].filter((k) => liveByKey.has(k)));
+    const usedLive = new Set();
 
-    matchedKeys.forEach((key) => {
-      const backendList = backendByKey.get(key) || [];
-      const liveList = liveByKey.get(key) || [];
-      // Compare first backend vs first live for headline; still show counts
-      const backendTrade = backendList[0];
-      const liveTrade = liveList[0];
+    backendBySymbol.forEach((backendList, sym) => {
+      const liveList = liveBySymbol.get(sym) || [];
+      backendList.forEach((backendTrade) => {
+        let matchLive = null;
+        let bestDiff = Infinity;
+        liveList.forEach((liveTrade) => {
+          if (usedLive.has(liveTrade)) return;
+          const diffHours = Math.abs(
+            moment.utc(backendTrade?.candel_time || backendTrade?.candle_time).diff(
+              moment.utc(liveTrade?.candel_time || liveTrade?.candle_time),
+              "hours",
+              true
+            )
+          );
+          if (diffHours <= 4 && diffHours < bestDiff) {
+            bestDiff = diffHours;
+            matchLive = liveTrade;
+          }
+        });
 
-      const fetcherDiff = minutesDiff(getFetcherTime(backendTrade), getFetcherTime(liveTrade));
-      const actionPriceBackend = getActionPrice(backendTrade);
-      const actionPriceLive = getActionPrice(liveTrade);
-      const priceDeltaPct = percentDiff(actionPriceBackend, actionPriceLive);
-      const investmentDeltaPct = percentDiff(parseNumber(backendTrade?.investment), parseNumber(liveTrade?.investment));
+        if (matchLive) {
+          usedLive.add(matchLive);
+        }
 
-      const backendStatus = statusFromCloseTime(backendTrade);
-      const liveStatus = statusFromCloseTime(liveTrade);
-      const backendClosePrice = getClosePrice(backendTrade);
-      const liveClosePrice = getClosePrice(liveTrade);
-      const closeTimeDiff = backendStatus === "closed" && liveStatus === "closed"
-        ? minutesDiff(getCloseTime(backendTrade), getCloseTime(liveTrade))
-        : null;
-      const closePriceDelta = backendStatus === "closed" && liveStatus === "closed" && backendClosePrice !== null && liveClosePrice !== null
-        ? (() => {
-            const denom = (Math.abs(liveClosePrice) + Math.abs(backendClosePrice)) / 2 || 1e-9;
-            return Math.abs(liveClosePrice - backendClosePrice) / denom * 100;
-          })()
-        : null;
+        const backendTradeRef = backendTrade || null;
+        const liveTradeRef = matchLive || null;
 
-      const issues = [];
-      if (fetcherDiff !== null && fetcherDiff > 5) {
-        issues.push(`Late fetch (${fetcherDiff.toFixed(1)}m)`);
-      }
-      if (priceDeltaPct !== null && priceDeltaPct > 15) {
-        issues.push(`Price gap ${priceDeltaPct.toFixed(1)}%`);
-      }
-      if (backendStatus === "closed" && liveStatus === "running") {
-        issues.push("Backend closed, live running");
-      }
-      if (backendStatus === "running" && liveStatus === "closed") {
-        issues.push("Backend running, live closed");
-      }
-      const livePl = parseNumber(liveTrade?.pl_after_comm);
-      const backendPl = parseNumber(backendTrade?.pl_after_comm);
-      if (closeTimeDiff !== null && closeTimeDiff > 16 && livePl !== null && backendPl !== null && livePl < backendPl) {
-        issues.push(`Close time gap ${closeTimeDiff.toFixed(1)}m and live earned less`);
-      }
-      if (closePriceDelta !== null && closePriceDelta > 15 && livePl !== null && backendPl !== null && livePl < backendPl) {
-        issues.push(`Close price gap ${closePriceDelta.toFixed(1)}% with worse P/L`);
-      }
-      if (investmentDeltaPct !== null && investmentDeltaPct > 0) {
-        issues.push(`Investment gap ${investmentDeltaPct.toFixed(1)}%`);
-      }
+        const fetcherDiff = minutesDiff(getFetcherTime(backendTradeRef), getFetcherTime(liveTradeRef));
+        const candleDiffHours =
+          backendTradeRef && liveTradeRef
+            ? Math.abs(
+                moment.utc(backendTradeRef?.candel_time || backendTradeRef?.candle_time).diff(
+                  moment.utc(liveTradeRef?.candel_time || liveTradeRef?.candle_time),
+                  "hours",
+                  true
+                )
+              )
+            : null;
+        const actionPriceBackend = getActionPrice(backendTradeRef);
+        const actionPriceLive = getActionPrice(liveTradeRef);
+        const priceDeltaPct = percentDiff(actionPriceBackend, actionPriceLive);
+        const investmentDeltaPct = percentDiff(parseNumber(backendTradeRef?.investment), parseNumber(liveTradeRef?.investment));
 
-      rows.push({
-        key,
-        backendList,
-        liveList,
-        backendTrade,
-        liveTrade,
-        fetcherDiff,
-        priceDeltaPct,
-        closeTimeDiff,
-        closePriceDelta,
-        investmentDeltaPct,
-        backendStatus,
-        liveStatus,
-        issues
+        const backendStatus = statusFromCloseTime(backendTradeRef);
+        const liveStatus = statusFromCloseTime(liveTradeRef);
+        const backendClosePrice = getClosePrice(backendTradeRef);
+        const liveClosePrice = getClosePrice(liveTradeRef);
+        const closeTimeDiff =
+          backendStatus === "closed" && liveStatus === "closed"
+            ? minutesDiff(getCloseTime(backendTradeRef), getCloseTime(liveTradeRef))
+            : null;
+        const closePriceDelta =
+          backendStatus === "closed" &&
+          liveStatus === "closed" &&
+          backendClosePrice !== null &&
+          liveClosePrice !== null
+            ? (() => {
+                const denom = (Math.abs(liveClosePrice) + Math.abs(backendClosePrice)) / 2 || 1e-9;
+                return Math.abs(liveClosePrice - backendClosePrice) / denom * 100;
+              })()
+            : null;
+
+        const issues = [];
+        if (candleDiffHours !== null && candleDiffHours > 4) {
+          issues.push(`Candle gap ${candleDiffHours.toFixed(1)}h`);
+        }
+        if (fetcherDiff !== null && fetcherDiff > 5) {
+          issues.push(`Late fetch (${fetcherDiff.toFixed(1)}m)`);
+        }
+        if (priceDeltaPct !== null && priceDeltaPct > 15) {
+          issues.push(`Price gap ${priceDeltaPct.toFixed(1)}%`);
+        }
+        if (backendStatus === "closed" && liveStatus === "running") {
+          issues.push("Backend closed, live running");
+        }
+        if (backendStatus === "running" && liveStatus === "closed") {
+          issues.push("Backend running, live closed");
+        }
+        const livePl = parseNumber(liveTradeRef?.pl_after_comm);
+        const backendPl = parseNumber(backendTradeRef?.pl_after_comm);
+        if (closeTimeDiff !== null && closeTimeDiff > 16 && livePl !== null && backendPl !== null && livePl < backendPl) {
+          issues.push(`Close time gap ${closeTimeDiff.toFixed(1)}m and live earned less`);
+        }
+        if (closePriceDelta !== null && closePriceDelta > 15 && livePl !== null && backendPl !== null && livePl < backendPl) {
+          issues.push(`Close price gap ${closePriceDelta.toFixed(1)}% with worse P/L`);
+        }
+        if (investmentDeltaPct !== null && investmentDeltaPct > 0) {
+          issues.push(`Investment gap ${investmentDeltaPct.toFixed(1)}%`);
+        }
+
+        rows.push({
+          key: `${sym}__${backendTradeRef?.candel_time || backendTradeRef?.candle_time || "na"}__${liveTradeRef?.candel_time || liveTradeRef?.candle_time || "na"}`,
+          backendList: backendTradeRef ? [backendTradeRef] : [],
+          liveList: liveTradeRef ? [liveTradeRef] : [],
+          backendTrade: backendTradeRef,
+          liveTrade: liveTradeRef,
+          fetcherDiff,
+          priceDeltaPct,
+          closeTimeDiff,
+          closePriceDelta,
+          investmentDeltaPct,
+          backendStatus,
+          liveStatus,
+          issues
+        });
       });
     });
 
-    const backendOnlyKeys = [...backendByKey.keys()].filter((k) => !liveByKey.has(k));
-    backendOnlyKeys.forEach((key) => {
-      rows.push({
-        key,
-        backendList: backendByKey.get(key) || [],
-        liveList: [],
-        backendTrade: backendByKey.get(key)?.[0],
-        liveTrade: null,
-        backendStatus: statusFromCloseTime(backendByKey.get(key)?.[0] || {}),
-        liveStatus: "missing",
-        issues: ["Missing in live"]
-      });
-    });
-
-    const liveOnlyKeys = [...liveByKey.keys()].filter((k) => !backendByKey.has(k));
-    liveOnlyKeys.forEach((key) => {
-      rows.push({
-        key,
-        backendList: [],
-        liveList: liveByKey.get(key) || [],
-        backendTrade: null,
-        liveTrade: liveByKey.get(key)?.[0],
-        backendStatus: "missing",
-        liveStatus: statusFromCloseTime(liveByKey.get(key)?.[0] || {}),
-        issues: ["Extra in live"]
+    liveBySymbol.forEach((liveList, sym) => {
+      liveList.forEach((liveTrade) => {
+        if (usedLive.has(liveTrade)) return;
+        rows.push({
+          key: `${sym}__liveonly__${liveTrade?.candel_time || liveTrade?.candle_time || "na"}`,
+          backendList: [],
+          liveList: [liveTrade],
+          backendTrade: null,
+          liveTrade,
+          fetcherDiff: null,
+          priceDeltaPct: null,
+          closeTimeDiff: null,
+          closePriceDelta: null,
+          investmentDeltaPct: null,
+          backendStatus: "missing",
+          liveStatus: statusFromCloseTime(liveTrade),
+          issues: ["Extra in live"]
+        });
       });
     });
 
     return rows;
-  }, [backendByKey, liveByKey]);
+  }, [backendBySymbol, liveBySymbol]);
 
   const [labelOrder, setLabelOrder] = useState(() => {
     try {
@@ -985,10 +1027,11 @@ const TradeComparePage = () => {
                   ? ((livePl - backendPl) / Math.abs(backendPl)) * 100
                   : null;
 
-              const timeLabel = Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : "—";
-              const priceLabel = Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : "—";
+              const bothClosed = row.backendStatus === "closed" && row.liveStatus === "closed";
+              const timeLabel = bothClosed && Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : "—";
+              const priceLabel = bothClosed && Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : "—";
               const plLabel =
-                livePl !== null && backendPl !== null
+                bothClosed && livePl !== null && backendPl !== null
                   ? `PL L:${livePl.toFixed(2)} / B:${backendPl.toFixed(2)} (Δ $${plDiff?.toFixed(2)} ${plDiffPct !== null ? `${plDiffPct.toFixed(1)}%` : ""})`
                   : "PL: —";
 
@@ -997,10 +1040,12 @@ const TradeComparePage = () => {
                   <div>Time: {timeLabel}</div>
                   <div>Price: {priceLabel}</div>
                   <div>{plLabel}</div>
+                  {!bothClosed && <div className="text-gray-500">Pending (running)</div>}
                 </div>
               );
 
               const closeClass = (() => {
+                if (!bothClosed) return "";
                 if (plDiff !== null) {
                   if (plDiff > 0) return "bg-green-200 text-green-900";
                   if (plDiff < 0) return "bg-red-200 text-red-900";

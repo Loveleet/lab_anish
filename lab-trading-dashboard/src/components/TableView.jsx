@@ -473,13 +473,26 @@ const filteredAndSortedData = useMemo(() => {
 useEffect(() => {
   if (!filteredAndSortedData.length) return;
   const keys = Object.keys(filteredAndSortedData[0]);
+
   let stored = [];
   try {
     stored = JSON.parse(localStorage.getItem(columnOrderKey) || "[]");
   } catch {
     stored = [];
   }
-  const cleaned = stored.filter((k) => keys.includes(k));
+
+  let baseOrder;
+  if (Array.isArray(stored) && stored.length) {
+    baseOrder = stored;
+  } else {
+    const desiredPrefix = ["Investment", "Pair"];
+    baseOrder = desiredPrefix.filter((k) => keys.includes(k));
+    keys.forEach((k) => {
+      if (!baseOrder.includes(k)) baseOrder.push(k);
+    });
+  }
+
+  const cleaned = baseOrder.filter((k) => keys.includes(k));
   const missing = keys.filter((k) => !cleaned.includes(k));
   const finalOrder = [...cleaned, ...missing];
   if (finalOrder.join("|") !== columnOrder.join("|")) {
