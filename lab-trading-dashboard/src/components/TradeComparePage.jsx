@@ -40,6 +40,22 @@ const getActionPrice = (trade) => {
 };
 
 const getClosePrice = (trade) => parseNumber(trade?.close_price ?? trade?.Close_Price ?? trade?.price);
+const getInterval = (trade) => (trade?.interval ?? trade?.Interval ?? "").toString();
+const toBinanceInterval = (val) => {
+  const raw = (val || "").toString().trim();
+  if (!raw) return "15m";
+  if (raw === "60") return "1h";
+  if (raw === "240") return "4h";
+  if (raw === "D" || raw === "1d" || raw === "1D") return "1d";
+  if (/^(\\d+)[mhd]$/i.test(raw)) return raw.toLowerCase();
+  return `${raw}m`;
+};
+const buildBinanceUrl = (symbol, interval) => {
+  const cleanSymbol = (symbol || "").replace("/", "").toUpperCase();
+  if (!cleanSymbol) return null;
+  const intervalParam = interval ? `?interval=${toBinanceInterval(interval)}` : "";
+  return `https://www.binance.com/en/futures/${cleanSymbol}${intervalParam}`;
+};
 
 const getFetcherTime = (trade) => trade?.fetcher_trade_time || trade?.fetcher_time || trade?.Fetcher_time;
 const getCloseTime = (trade) =>
@@ -1044,6 +1060,8 @@ const TradeComparePage = () => {
             {sortedComparisons.map((row) => {
               const symbol = row.backendTrade?.pair || row.liveTrade?.pair || "N/A";
               const candle = row.backendTrade?.candel_time || row.liveTrade?.candel_time || "N/A";
+              const interval = getInterval(row.backendTrade) || getInterval(row.liveTrade);
+              const binanceUrl = buildBinanceUrl(symbol, interval);
               const fetcherCell = Number.isFinite(row.fetcherDiff)
                 ? `${row.fetcherDiff.toFixed(1)}m`
                 : "—";
@@ -1057,6 +1075,8 @@ const TradeComparePage = () => {
               const investmentClass = severityTint(row.investmentDeltaPct);
               const livePl = parseNumber(row.liveTrade?.pl_after_comm);
               const backendPl = parseNumber(row.backendTrade?.pl_after_comm);
+              const liveClosePrice = getClosePrice(row.liveTrade);
+              const backendClosePrice = getClosePrice(row.backendTrade);
               const plDiff = livePl !== null && backendPl !== null ? livePl - backendPl : null;
               const plDiffPct =
                 livePl !== null && backendPl !== null && backendPl !== 0
@@ -1064,19 +1084,40 @@ const TradeComparePage = () => {
                   : null;
 
               const bothClosed = row.backendStatus === "closed" && row.liveStatus === "closed";
-              const timeLabel = bothClosed && Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : "—";
-              const priceLabel = bothClosed && Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : "—";
-              const plContent =
-                bothClosed && livePl !== null && backendPl !== null ? (
-                  <div className="leading-tight">
-                    <div>PL L:{livePl.toFixed(2)} / B:{backendPl.toFixed(2)}</div>
+              const backendCloseTime = getCloseTime(row.backendTrade);
+              const liveCloseTime = getCloseTime(row.liveTrade);
+              const timeLabel = (() => {
+                if (bothClosed && Number.isFinite(row.closeTimeDiff)) return `${row.closeTimeDiff.toFixed(1)}m`;
+                const parts = [];
+                if (backendCloseTime) parts.push(`B:${backendCloseTime}`);
+                if (liveCloseTime) parts.push(`L:${liveCloseTime}`);
+                return parts.length ? parts.join(" | ") : "—";
+              })();
+              const priceLabel = (() => {
+                if (bothClosed && Number.isFinite(row.closePriceDelta)) return `${row.closePriceDelta.toFixed(1)}%`;
+                const parts = [];
+                if (Number.isFinite(backendClosePrice)) parts.push(`B:${backendClosePrice.toFixed(2)}`);
+                if (Number.isFinite(liveClosePrice)) parts.push(`L:${liveClosePrice.toFixed(2)}`);
+                return parts.length ? parts.join(" / ") : "—";
+              })();
+              const plContent = (() => {
+                const parts = [];
+                if (backendPl !== null) parts.push(`B:${backendPl.toFixed(2)}`);
+                if (livePl !== null) parts.push(`L:${livePl.toFixed(2)}`);
+                const deltaLine =
+                  plDiff !== null ? (
                     <div className="font-bold text-sm">
-                      Δ ${plDiff?.toFixed(2)} {plDiffPct !== null ? `(${plDiffPct.toFixed(1)}%)` : ""}
+                      Δ ${plDiff.toFixed(2)} {plDiffPct !== null ? `(${plDiffPct.toFixed(1)}%)` : ""}
                     </div>
+                  ) : null;
+                if (parts.length === 0 && !deltaLine) return <div>PL: —</div>;
+                return (
+                  <div className="leading-tight">
+                    {parts.length ? <div>{parts.join(" / ")}</div> : null}
+                    {deltaLine}
                   </div>
-                ) : (
-                  <div>PL: —</div>
                 );
+              })();
 
               const closeCell = (
                 <div className="space-y-0.5 text-xs">
@@ -1115,7 +1156,20 @@ const TradeComparePage = () => {
                   >
                     <td className="px-3 py-2 font-semibold">
                       <div className="flex items-center gap-2">
-                        <span>{symbol}</span>
+                        {binanceUrl ? (
+                          <a
+                            href={binanceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 dark:text-cyan-300 underline"
+                            onClick={(e) => e.stopPropagation()}
+                            title={`Open ${symbol} on Binance (${toBinanceInterval(interval)})`}
+                          >
+                            {symbol}
+                          </a>
+                        ) : (
+                          <span>{symbol}</span>
+                        )}
                         <button
                           className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                           onClick={(e) => {
