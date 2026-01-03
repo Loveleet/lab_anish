@@ -477,8 +477,8 @@ const getFilteredForTitle = useMemo(() => {
     // Total Stats (all trades)
     pushTo("Total_Stats");
     
-    // Only add to Assigned_New if it's actually an assigned trade
-    if (trade.type === "assign") pushTo("Assigned_New");
+    // Assigned trades: include new assigns and backend-closed assigns
+    if (trade.type === "assign" || trade.type === "back_close") pushTo("Assigned_New");
     
 
 
@@ -1285,7 +1285,7 @@ useEffect(() => {
         });
       }}
     >
-      {filteredTradeData.filter((trade) => trade.type === "assign").length}
+      {filteredTradeData.filter((trade) => trade.type === "assign" || trade.type === "back_close").length}
     </span>
   </div>
 

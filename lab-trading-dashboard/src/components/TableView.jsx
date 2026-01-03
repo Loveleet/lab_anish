@@ -565,7 +565,7 @@ useEffect(() => {
       filteredTrades = filteredTrades.filter(trade => trade.type === "running" || trade.type === "hedge_hold");
       break;
     case "Assigned_New":
-      filteredTrades = filteredTrades.filter(trade => trade.type === "assign");
+      filteredTrades = filteredTrades.filter(trade => trade.type === "assign" || trade.type === "back_close");
       break;
     case "Direct_Running_Stats":
       filteredTrades = filteredTrades.filter(trade => {

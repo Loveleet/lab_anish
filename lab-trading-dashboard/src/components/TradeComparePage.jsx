@@ -63,6 +63,8 @@ const percentDiff = (base, compare) => {
 };
 
 const statusFromCloseTime = (trade) => {
+  const typeVal = (trade?.type || trade?.Type || "").toString().toLowerCase();
+  if (typeVal.includes("back_close")) return "closed";
   const closeAt = getCloseTime(trade);
   return closeAt ? "closed" : "running";
 };
