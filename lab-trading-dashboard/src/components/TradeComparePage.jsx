@@ -687,6 +687,26 @@ const TradeComparePage = () => {
     return { backendMissing, liveExtra, lateFetch, priceGap, closureMismatch, closureGap, totalBackend, totalLive };
   }, [comparisons, backendTrades, liveTrades]);
 
+  // Totals of PL differences (live vs backend) for closed trades within the current filter scope
+  const closeDeltaTotals = useMemo(() => {
+    let profit = 0;
+    let loss = 0;
+    filteredComparisons.forEach((row) => {
+      const livePl = parseNumber(row.liveTrade?.pl_after_comm);
+      const backendPl = parseNumber(row.backendTrade?.pl_after_comm);
+      const bothClosed = row.backendStatus === "closed" && row.liveStatus === "closed";
+      if (!bothClosed || livePl === null || backendPl === null) return;
+      const diff = livePl - backendPl;
+      if (diff > 0) profit += diff;
+      if (diff < 0) loss += Math.abs(diff);
+    });
+    return {
+      profit,
+      loss,
+      net: profit - loss
+    };
+  }, [filteredComparisons]);
+
   const renderIssues = (issues) => {
     if (!issues || !issues.length) return <Badge tone="bg-green-100 text-green-800">OK</Badge>;
     return (
@@ -717,6 +737,20 @@ const TradeComparePage = () => {
           <div>
             <h1 className="text-2xl font-bold">Trade Compare</h1>
             <p className="text-sm text-gray-600 dark:text-gray-300">Backend (Assigned) vs Live by symbol + candle time</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <div className="px-4 py-2 rounded-lg bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-100 border border-green-200 dark:border-green-700">
+              <div className="text-xs uppercase tracking-wide">Total Profit Δ</div>
+              <div className="text-xl font-bold">${closeDeltaTotals.profit.toFixed(2)}</div>
+            </div>
+            <div className="px-4 py-2 rounded-lg bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-100 border border-red-200 dark:border-red-700">
+              <div className="text-xs uppercase tracking-wide">Total Loss Δ</div>
+              <div className="text-xl font-bold">${closeDeltaTotals.loss.toFixed(2)}</div>
+            </div>
+            <div className="px-4 py-2 rounded-lg bg-blue-100 text-blue-900 dark:bg-blue-900/60 dark:text-blue-100 border border-blue-200 dark:border-blue-700">
+              <div className="text-xs uppercase tracking-wide">Net PL Δ</div>
+              <div className="text-xl font-bold">${closeDeltaTotals.net.toFixed(2)}</div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Link
