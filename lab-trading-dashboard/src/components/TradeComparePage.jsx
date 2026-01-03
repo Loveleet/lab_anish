@@ -1032,16 +1032,23 @@ const TradeComparePage = () => {
               const bothClosed = row.backendStatus === "closed" && row.liveStatus === "closed";
               const timeLabel = bothClosed && Number.isFinite(row.closeTimeDiff) ? `${row.closeTimeDiff.toFixed(1)}m` : "—";
               const priceLabel = bothClosed && Number.isFinite(row.closePriceDelta) ? `${row.closePriceDelta.toFixed(1)}%` : "—";
-              const plLabel =
-                bothClosed && livePl !== null && backendPl !== null
-                  ? `PL L:${livePl.toFixed(2)} / B:${backendPl.toFixed(2)} (Δ $${plDiff?.toFixed(2)} ${plDiffPct !== null ? `${plDiffPct.toFixed(1)}%` : ""})`
-                  : "PL: —";
+              const plContent =
+                bothClosed && livePl !== null && backendPl !== null ? (
+                  <div className="leading-tight">
+                    <div>PL L:{livePl.toFixed(2)} / B:{backendPl.toFixed(2)}</div>
+                    <div className="font-bold text-sm">
+                      Δ ${plDiff?.toFixed(2)} {plDiffPct !== null ? `(${plDiffPct.toFixed(1)}%)` : ""}
+                    </div>
+                  </div>
+                ) : (
+                  <div>PL: —</div>
+                );
 
               const closeCell = (
                 <div className="space-y-0.5 text-xs">
                   <div>Time: {timeLabel}</div>
                   <div>Price: {priceLabel}</div>
-                  <div>{plLabel}</div>
+                  <div>{plContent}</div>
                   {!bothClosed && <div className="text-gray-500">Pending (running)</div>}
                 </div>
               );
