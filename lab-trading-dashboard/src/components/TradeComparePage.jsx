@@ -333,8 +333,11 @@ const TradeComparePage = () => {
         let peakAt = null;
         let issue = null;
         let recovered = null;
+        let everPositive = null;
         parsed.forEach((entry) => {
           if (entry.pl === null) return;
+          if (everPositive === null) everPositive = false;
+          if (entry.pl > 0) everPositive = true;
           if (!crossed && entry.pl > 20) {
             crossed = true;
             peak = entry.pl;
@@ -360,7 +363,7 @@ const TradeComparePage = () => {
 
         setRowDetails((prev) => ({
           ...prev,
-          [row.key]: { logs: parsed, issue, recovered, loaded: true }
+          [row.key]: { logs: parsed, issue, recovered, loaded: true, everPositive }
         }));
       } catch (e) {
         setRowDetails((prev) => ({ ...prev, [row.key]: { error: e.message || "Failed to load logs" } }));
@@ -607,6 +610,8 @@ const TradeComparePage = () => {
           );
         case "plDrop":
           return !!rowDetails[r.key]?.issue;
+        case "neverProfit":
+          return rowDetails[r.key]?.everPositive === false;
         case "totalBackend":
           return r.backendList.length > 0;
         case "totalLive":
@@ -621,6 +626,17 @@ const TradeComparePage = () => {
   const dropIssueCount = useMemo(
     () => comparisons.filter((row) => rowDetails[row.key]?.issue).length,
     [comparisons, rowDetails]
+  );
+  const neverProfitCount = useMemo(
+    () => filteredComparisons.filter((row) => rowDetails[row.key]?.everPositive === false).length,
+    [filteredComparisons, rowDetails]
+  );
+  const scannedCount = useMemo(
+    () =>
+      filteredComparisons.filter(
+        (row) => rowDetails[row.key]?.loaded || rowDetails[row.key]?.error
+      ).length,
+    [filteredComparisons, rowDetails]
   );
 
   const sortedComparisons = useMemo(() => {
@@ -905,7 +921,13 @@ const TradeComparePage = () => {
               { key: "priceGap", title: "Price gap (>15%)", value: summary.priceGap },
               { key: "closureMismatch", title: "Closure mismatch", value: summary.closureMismatch },
               { key: "closureGap", title: "Closure gap (time/price)", value: summary.closureGap },
-              { key: "plDrop", title: "PL drop after $20 (>15%)", value: dropIssueCount }
+              { key: "plDrop", title: "PL drop after $20 (>15%)", value: dropIssueCount },
+              {
+                key: "neverProfit",
+                title: "Never in profit (scanned)",
+                value: neverProfitCount,
+                subtitle: `${scannedCount}/${filteredComparisons.length} scanned`
+              }
             ].map((item, idx) => {
               const palette = [
                 "bg-gradient-to-br from-cyan-500/80 via-sky-400/80 to-blue-500/80 text-white",
@@ -933,6 +955,7 @@ const TradeComparePage = () => {
                   <Card
                     title={item.title}
                     value={item.value}
+                    subtitle={item.subtitle}
                     tint={isActive ? tint : `${tint} opacity-90`}
                   />
                 </button>
