@@ -440,16 +440,32 @@ const filteredAndSortedData = useMemo(() => {
   // First apply filters
   let data = [...filteredData];
 
+  const normalizeCellValue = (val) => {
+    if (val === null || val === undefined) return "";
+    if (typeof val !== "string") return String(val).trim();
+    // Use DOM to mirror visible text (handles links/buttons HTML)
+    const div = document.createElement("div");
+    div.innerHTML = val;
+    return (div.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const headerKeys = columnOrder.length
+    ? columnOrder
+    : (filteredData[0] ? Object.keys(filteredData[0]) : []);
+
   Object.entries(activeFilters).forEach(([index, selectedValues]) => {
     if (!selectedValues) return;
+    const normalizedSelected = selectedValues.map(normalizeCellValue);
 
     const columnIndex = parseInt(index);
+    const key = headerKeys[columnIndex];
+    if (!key) return;
 
     data = data.filter(row => {
-      const keys = Object.keys(row);
-      const key = keys[columnIndex];
-      const value = row[key]?.toString().trim();
-      return selectedValues.includes(value);
+      const value = normalizeCellValue(row[key]);
+      return normalizedSelected.includes(value);
     });
   });
 
