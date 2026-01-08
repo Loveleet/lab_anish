@@ -63,6 +63,7 @@ const formatTradeData = (trade, index) => ({
     : "N/A",
   "⏱️": trade.interval || "N/A",
   "💼": trade.action || "N/A",
+  Investment: safeFixed(trade.investment, 2, "$"),
   PL: safeFixed(trade.pl_after_comm, 2),
   "🛡️_BUY": safeFixed(trade.hedge_buy_pl, 2),
   "🛡️_SELL": safeFixed(trade.hedge_sell_pl, 2),
@@ -99,7 +100,6 @@ const formatTradeData = (trade, index) => ({
   Close_Price: safeFixed(trade.close_price, 6),
   Commission: safeFixed(trade.commission, 2, "$"),
   Date: trade.candel_time ? trade.candel_time.split(" ")[0] : "N/A",
-  Investment: safeFixed(trade.investment, 2, "$"),
   Swing1: safeFixed(trade.swing1, 6),
   Swing2: safeFixed(trade.swing2, 6),
   Swing3: safeFixed(trade.swing3, 6),
@@ -501,7 +501,7 @@ useEffect(() => {
   if (Array.isArray(stored) && stored.length) {
     baseOrder = stored;
   } else {
-    const desiredPrefix = ["Investment", "Pair"];
+    const desiredPrefix = ["Investment", "PL", "Pair"];
     baseOrder = desiredPrefix.filter((k) => keys.includes(k));
     keys.forEach((k) => {
       if (!baseOrder.includes(k)) baseOrder.push(k);
@@ -510,7 +510,18 @@ useEffect(() => {
 
   const cleaned = baseOrder.filter((k) => keys.includes(k));
   const missing = keys.filter((k) => !cleaned.includes(k));
-  const finalOrder = [...cleaned, ...missing];
+  let finalOrder = [...cleaned, ...missing];
+
+  // Ensure Investment always appears before PL
+  const investmentIdx = finalOrder.indexOf("Investment");
+  const plIdx = finalOrder.indexOf("PL");
+  if (investmentIdx !== -1 && plIdx !== -1 && investmentIdx > plIdx) {
+    const reordered = [...finalOrder];
+    reordered.splice(investmentIdx, 1);
+    reordered.splice(plIdx, 0, "Investment");
+    finalOrder = reordered;
+  }
+
   if (finalOrder.join("|") !== columnOrder.join("|")) {
     setColumnOrder(finalOrder);
     localStorage.setItem(columnOrderKey, JSON.stringify(finalOrder));
