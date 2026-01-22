@@ -18,6 +18,7 @@ import GroupViewPage from './pages/GroupViewPage';
 import RefreshControls from './components/RefreshControls';
 import SuperTrendPanel from "./SuperTrendPanel";
 import TradeComparePage from "./components/TradeComparePage";
+import SoundSettings from "./components/SoundSettings";
 
 // Helper to get API base URL
 const API_BASE_URL =
@@ -168,6 +169,39 @@ const App = () => {
     localStorage.setItem("fontSizeLevel", fontSizeLevel);
   }, [fontSizeLevel]);
 
+  // -------- Sound / New-Trade settings (non-invasive to filters) --------
+  const SOUND_STORAGE_KEY = "soundSettings";
+  const [isSoundOpen, setIsSoundOpen] = useState(false);
+  const [soundSettings, setSoundSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem(SOUND_STORAGE_KEY);
+      return saved
+        ? JSON.parse(saved)
+        : {
+            enabled: true,
+            volume: 0.7,
+            mode: "tts",
+            announceActions: { BUY: true, SELL: true },
+            announceSignals: {},
+            audioUrls: { BUY: "", SELL: "" },
+            newTradeWindowHours: 4,
+          };
+    } catch {
+      return {
+        enabled: true,
+        volume: 0.7,
+        mode: "tts",
+        announceActions: { BUY: true, SELL: true },
+        announceSignals: {},
+        audioUrls: { BUY: "", SELL: "" },
+        newTradeWindowHours: 4,
+      };
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(SOUND_STORAGE_KEY, JSON.stringify(soundSettings));
+  }, [soundSettings]);
+
 
   const [layoutOption, setLayoutOption] = useState(() => {
     const saved = localStorage.getItem("layoutOption");
@@ -316,6 +350,7 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       setLogData(logs);
       setClientData(unifiedMachines);
 
+      // Preserve user selections: keep previous values; new machines default to true
       // Always select ALL machines (ignore active status) so every machine’s trades show
       const allMachinesSelected = unifiedMachines.reduce((acc, machine) => {
         const key = toMachineKey(machine.machineid);
@@ -497,6 +532,109 @@ const getFilteredForTitle = useMemo(() => {
   
   return memo;
 }, [filteredTradeData]);
+
+  // Signals list available in current filtered data (for settings UI)
+  const availableSignals = useMemo(() => {
+    const set = new Set((Array.isArray(filteredTradeData) ? filteredTradeData : []).map(t => t.signalfrom).filter(Boolean));
+    return Array.from(set);
+  }, [filteredTradeData]);
+
+  // Build a stable key for a trade (for sound dedupe)
+  const tradeKey = (t) => {
+    const uid = t.unique_id || t.Unique_ID || t.uid;
+    if (uid) return `uid:${String(uid)}`;
+    const tm = t.candel_time || t.candle_time || t.timestamp || t.created_at;
+    const pair = t.pair || t.Pair || t.symbol || "";
+    const action = t.action || t.Action || "";
+    return `ts:${String(tm)}|${pair}|${action}`;
+  };
+
+  // Subset: new direct running trades within N hours (based on candel_time and current filters)
+  const newDirectRunning = useMemo(() => {
+    const hours = Number(soundSettings?.newTradeWindowHours || 4);
+    // Window is evaluated in IST
+    const nowIst = moment.utc().utcOffset(330);
+    return (filteredTradeData || []).filter(t => {
+      const isDirectRunning = (t.type === "running" || t.type === "hedge_hold") && !parseHedge(t.hedge);
+      if (!isDirectRunning) return false;
+      // Prefer Fetcher (UTC) time, then fallbacks
+      const ts =
+        t.fetcher_trade_time ||
+        t.Fetcher_Trade_time ||
+        t.fetch_time ||
+        t.candel_time ||
+        t.candle_time ||
+        t.timestamp ||
+        t.created_at;
+      if (!ts) return false;
+      // Convert UTC -> IST for window comparison
+      const mIst = moment.utc(ts).utcOffset(330);
+      if (!mIst.isValid()) return false;
+      return nowIst.diff(mIst, "hours", true) <= hours;
+    });
+  }, [filteredTradeData, soundSettings]);
+
+  // Persist announced keys to avoid repeat after refresh
+  const ANNOUNCED_STORAGE_KEY = "announcedTradeKeysV1";
+  const announcedMapRef = useRef(new Map()); // key -> timestamp
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ANNOUNCED_STORAGE_KEY);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        const now = Date.now();
+        const sevenDays = 7 * 24 * 3600 * 1000;
+        Object.entries(obj || {}).forEach(([k, ts]) => {
+          if (typeof ts === "number" && now - ts < sevenDays) {
+            announcedMapRef.current.set(k, ts);
+          }
+        });
+      }
+    } catch {}
+  }, []);
+  const persistAnnounced = () => {
+    const entries = Array.from(announcedMapRef.current.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5000);
+    try { localStorage.setItem(ANNOUNCED_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries))); } catch {}
+  };
+
+  // Play one notification honoring settings
+  const playNotification = (t) => {
+    if (!soundSettings?.enabled) return;
+    const action = String(t.action || "").toUpperCase();
+    const signal = String(t.signalfrom || "");
+    if (soundSettings.announceActions && soundSettings.announceActions[action] === false) return;
+    if (soundSettings.announceSignals && Object.keys(soundSettings.announceSignals).length && soundSettings.announceSignals[signal] === false) return;
+    const volume = Math.max(0, Math.min(1, Number(soundSettings.volume || 0.7)));
+    if (soundSettings.mode === "audio") {
+      const url = soundSettings.audioUrls?.[action];
+      if (url) {
+        try { const audio = new Audio(url); audio.volume = volume; audio.play().catch(()=>{}); } catch {}
+        return;
+      }
+    }
+    try {
+      const phrase = `${action === "BUY" ? "Buy" : action === "SELL" ? "Sell" : action} from ${signal || "signal"}`;
+      const u = new SpeechSynthesisUtterance(phrase);
+      u.volume = volume;
+      window.speechSynthesis.speak(u);
+    } catch {}
+  };
+
+  // Sound only for newly seen items in the subset; persist announced keys
+  const seenSubsetRef = useRef(new Set());
+  useEffect(() => {
+    const subset = Array.isArray(newDirectRunning) ? newDirectRunning : [];
+    const subsetKeys = new Set(subset.map(tradeKey));
+    const newOnes = subset.filter(t => !seenSubsetRef.current.has(tradeKey(t)));
+    seenSubsetRef.current = subsetKeys;
+    const toAnnounce = newOnes.filter(t => !announcedMapRef.current.has(tradeKey(t)));
+    if (!toAnnounce.length) return;
+    toAnnounce.forEach(t => {
+      playNotification(t);
+      announcedMapRef.current.set(tradeKey(t), Date.now());
+    });
+    persistAnnounced();
+  }, [newDirectRunning, soundSettings]);
 
 useEffect(() => {
   // 🔹 Total Investment Calculation
@@ -1144,6 +1282,13 @@ useEffect(() => {
               >
                 {darkMode ? '🌞' : '🌙'}
               </button>
+              <button
+                onClick={() => setIsSoundOpen(true)}
+                className="absolute right-24 top-3 z-20 px-2 py-1 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-105 transition-all text-sm font-semibold"
+                title="Sound & New trades settings"
+              >
+                🔊 Sound
+              </button>
               {/* SVG Graph Background (animated) */}
               <AnimatedGraphBackground width={400} height={48} opacity={0.4} />
               {/* LAB text */}
@@ -1446,6 +1591,23 @@ useEffect(() => {
                     >
                       {Object.entries(metrics).map(([title, value]) => {
                         const normalizedKey = title.trim().replace(/\s+/g, "_");
+                        const showSticker = normalizedKey === "Direct_Running_Stats";
+                        const mostRecent = showSticker ? (newDirectRunning || [])
+                          .map(t =>
+                            t.fetcher_trade_time ||
+                            t.Fetcher_Trade_time ||
+                            t.fetch_time ||
+                            t.candel_time ||
+                            t.candle_time ||
+                            t.timestamp ||
+                            t.created_at
+                          )
+                          .filter(Boolean)
+                          .sort((a, b) => new Date(b) - new Date(a))[0] : null;
+                        const lastTs = mostRecent ? (moment.utc(mostRecent).isValid() ? moment.utc(mostRecent).format("HH:mm") + " UTC" : null) : null;
+                        const stickerText = showSticker && (newDirectRunning?.length > 0)
+                          ? `New: ${newDirectRunning.length}${lastTs ? ` • Last ${lastTs}` : ""}`
+                          : null;
                         return (
                           <div key={normalizedKey} className="relative">
                             <DashboardCard
@@ -1457,6 +1619,15 @@ useEffect(() => {
                                 setSelectedBox(prev =>
                                   prev === normalizedKey || !hasData ? null : normalizedKey
                                 );
+                              }}
+                              sticker={showSticker ? stickerText : null}
+                              onStickerClick={() => {
+                                setSelectedBox("Direct_Running_New");
+                                setActiveSubReport("running");
+                                setTimeout(() => {
+                                  const section = document.getElementById("tableViewSection");
+                                  if (section) section.scrollIntoView({ behavior: "smooth" });
+                                }, 0);
                               }}
                               filteredTradeData={filteredTradeData}
                               className="bg-white dark:bg-[#181a20] border border-gray-200 dark:border-gray-800"
@@ -1474,7 +1645,7 @@ useEffect(() => {
                   <div className="mt-6">
                     {selectedBox && (() => {
                       const normalizedKey = selectedBox?.trim().replace(/\s+/g, "_");
-                      const data = getFilteredForTitle[normalizedKey];
+                      const data = normalizedKey === "Direct_Running_New" ? newDirectRunning : getFilteredForTitle[normalizedKey];
                       if (data && data.length > 0) {
                         return (
                           <div className="mt-6">
@@ -1503,6 +1674,13 @@ useEffect(() => {
                 </div>
               </div>
             </div>
+            <SoundSettings
+              isOpen={isSoundOpen}
+              onClose={() => setIsSoundOpen(false)}
+              settings={soundSettings}
+              onChange={setSoundSettings}
+              availableSignals={availableSignals}
+            />
           </>
         } />
       </Routes>

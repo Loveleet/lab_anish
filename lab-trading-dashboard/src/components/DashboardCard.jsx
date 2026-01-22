@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 
-const DashboardCard = ({ title, value, isSelected, onClick }) =>  {
+const DashboardCard = ({ title, value, isSelected, onClick, sticker, onStickerClick }) =>  {
   // Tag state for each card, loaded from localStorage by title
   const [tag, setTag] = React.useState(() => localStorage.getItem(`boxTag-${title}`) || "");
   const [showTagEditor, setShowTagEditor] = useState(false);
@@ -217,6 +217,19 @@ const DashboardCard = ({ title, value, isSelected, onClick }) =>  {
         tabIndex={0}
         title={title.replace(/_/g, " ")}
       >
+        {/* Optional sticker overlay (e.g., new trades) */}
+        {sticker && (
+          <button
+            className="absolute -top-2 -right-2 z-20 bg-pink-600 text-white text-[10px] md:text-xs font-bold px-2 py-1 rounded-full shadow-lg border border-pink-300 hover:bg-pink-700 animate-pulse ring-2 ring-pink-300"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onStickerClick) onStickerClick();
+            }}
+            title="View newly added trades"
+          >
+            {sticker}
+          </button>
+        )}
         {/* Title with tooltip */}
         <h2 className="text-lg font-semibold text-center text-sky-300 mb-2 truncate" title={title.replace(/_/g, " ")}>{title.replace(/_/g, " ")}</h2>
         {/* Properly formatted value using JSX with tooltips */}
