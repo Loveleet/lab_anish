@@ -583,10 +583,8 @@ useEffect(() => {
       });
       break;
     case "Hedge_Closed_Stats":
-      filteredTrades = filteredTrades.filter(trade => {
-        const isHedge = parseHedge(trade.hedge);
-        return trade.type === "hedge_close" && isHedge;
-      });
+      // Only explicit hedge_close trades; don't require hedge flag which may be unset
+      filteredTrades = filteredTrades.filter(trade => trade.type === "hedge_close");
       break;
     case "Total_Running_Stats":
       filteredTrades = filteredTrades.filter(trade => trade.type === "running" || trade.type === "hedge_hold");

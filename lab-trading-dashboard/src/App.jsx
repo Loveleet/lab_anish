@@ -861,8 +861,8 @@ Hedge_Closed_Stats: (
                 title="Closed Hedge Count"
               >
                 {filteredTradeData.filter(trade => {
-                const isHedge = parseHedge(trade.hedge);
-                return isHedge && trade.type === "hedge_close";
+                // Count all explicit hedge_close trades (hedge flag may be unset)
+                return trade.type === "hedge_close";
               }).length}
               </span>
              
