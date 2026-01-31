@@ -594,20 +594,21 @@ useEffect(() => {
       break;
     case "Direct_Running_Stats":
       filteredTrades = filteredTrades.filter(trade => {
-        const isHedge = parseHedge(trade.hedge);
-        return (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+        const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
+        // Direct should be pure running and not hedge by flag or type
+        return trade.type === "running" && !isHedgeEffective;
       });
       break;
     case "Hedge_Running_Stats":
       filteredTrades = filteredTrades.filter(trade => {
-        const isHedge = parseHedge(trade.hedge);
+        const isHedge = parseHedge(trade.hedge) || trade.type === "hedge_hold";
         const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
         return (trade.type === "running" || trade.type === "hedge_hold") && isHedge && !isHedge11;
       });
       break;
     case "Hedge_on_Hold":
       filteredTrades = filteredTrades.filter(trade => {
-        const isHedge = parseHedge(trade.hedge);
+        const isHedge = parseHedge(trade.hedge) || trade.type === "hedge_hold";
         const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
         return (trade.type === "running" || trade.type === "hedge_hold") && isHedge && isHedge11;
       });

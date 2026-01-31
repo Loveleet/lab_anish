@@ -497,17 +497,18 @@ const getFilteredForTitle = useMemo(() => {
     // Running Stats
     if (trade.type === "running" || trade.type === "hedge_hold") {
       pushTo("Total_Running_Stats");
-      
-      if (!isHedge) {
+      // Treat type=hedge_hold as hedge even if hedge flag is unset
+      const isHedgeEffective = isHedge || trade.type === "hedge_hold";
+      if (!isHedgeEffective) {
         pushTo("Direct_Running_Stats");
       }
-      if (isHedge && !isHedge11) {
+      if (isHedgeEffective && !isHedge11) {
         pushTo("Hedge_Running_Stats");
       }
     }
     
     // Hedge on Hold (trades that are hedge and running)
-    if (isHedge && isHedge11 && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Hedge_on_Hold");
+    if ((isHedge || trade.type === "hedge_hold") && isHedge11 && (trade.type === "running" || trade.type === "hedge_hold")) pushTo("Hedge_on_Hold");
     
     // Total Stats (all trades)
     pushTo("Total_Stats");
@@ -555,7 +556,9 @@ const getFilteredForTitle = useMemo(() => {
     // Window is evaluated in IST
     const nowIst = moment.utc().utcOffset(330);
     return (filteredTradeData || []).filter(t => {
-      const isDirectRunning = (t.type === "running" || t.type === "hedge_hold") && !parseHedge(t.hedge);
+      const isHedgeEffective = parseHedge(t.hedge) || t.type === "hedge_hold";
+      // Only direct pure running trades (exclude hedge_hold regardless of flag)
+      const isDirectRunning = (t.type === "running") && !isHedgeEffective;
       if (!isDirectRunning) return false;
       // Prefer Fetcher (UTC) time, then fallbacks
       const ts =
@@ -650,13 +653,13 @@ useEffect(() => {
     .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const runningPlusFiltered = filteredTradeData
     .filter(trade => {
-      const isHedge = parseHedge(trade.hedge);
-      return trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+      const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
+      return trade.pl_after_comm > 0 && trade.type === "running" && !isHedgeEffective;
     });
   const runningMinusFiltered = filteredTradeData
     .filter(trade => {
-      const isHedge = parseHedge(trade.hedge);
-      return trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+      const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
+      return trade.pl_after_comm < 0 && trade.type === "running" && !isHedgeEffective;
     });
 
   const runningPlus = runningPlusFiltered.reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
@@ -665,19 +668,19 @@ useEffect(() => {
       .filter(trade => trade.type === "close")
       .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const runningProfit = filteredTradeData
-  .filter(trade => {
-    const isHedge = parseHedge(trade.hedge);
-    return !isHedge && (trade.type === "running" || trade.type === "hedge_hold");
-  })
-  .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
+    .filter(trade => {
+      const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
+      return trade.type === "running" && !isHedgeEffective;
+    })
+    .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
 
   const buyRunningDirect = filteredTradeData.filter(t => {
-    const isHedge = parseHedge(t.hedge);
-    return t.action === "BUY" && (t.type === "running" || t.type === "hedge_hold") && !isHedge;
+    const isHedgeEffective = parseHedge(t.hedge) || t.type === "hedge_hold";
+    return t.action === "BUY" && t.type === "running" && !isHedgeEffective;
   }).length;
   const buyRunningHedge = filteredTradeData.filter(t => {
-    const isHedge = parseHedge(t.hedge);
-    return t.action === "BUY" && (t.type === "running" || t.type === "hedge_hold") && isHedge;
+    const isHedgeEffective = parseHedge(t.hedge) || t.type === "hedge_hold";
+    return t.action === "BUY" && (t.type === "running" || t.type === "hedge_hold") && isHedgeEffective;
   }).length;
   const buyRunningCloseD = filteredTradeData.filter(t => t.action === "BUY" && t.type === "close").length ;
   const buyRunningCloseH = filteredTradeData.filter(t => t.action === "BUY" && t.type === "hedge_close").length ;
@@ -686,12 +689,12 @@ useEffect(() => {
 
   const buyTotal = filteredTradeData.filter(t => t.action === "BUY").length;
   const sellRunningDirect = filteredTradeData.filter(t => {
-    const isHedge = parseHedge(t.hedge);
-    return t.action === "SELL" && (t.type === "running" || t.type === "hedge_hold") && !isHedge;
+    const isHedgeEffective = parseHedge(t.hedge) || t.type === "hedge_hold";
+    return t.action === "SELL" && t.type === "running" && !isHedgeEffective;
   }).length;
   const sellRunningHedge = filteredTradeData.filter(t => {
-    const isHedge = parseHedge(t.hedge);
-    return t.action === "SELL" && (t.type === "running" || t.type === "hedge_hold") && isHedge;
+    const isHedgeEffective = parseHedge(t.hedge) || t.type === "hedge_hold";
+    return t.action === "SELL" && (t.type === "running" || t.type === "hedge_hold") && isHedgeEffective;
   }).length;
   const sellRunningCloseD = filteredTradeData.filter(t => t.action === "SELL" && t.type === "close" ).length;
   const sellRunningCloseH = filteredTradeData.filter(t => t.action === "SELL" && t.type === "hedge_close").length;
@@ -744,23 +747,23 @@ useEffect(() => {
 
   const hedgeActiveRunningPlus = filteredTradeData
   .filter(trade => {
-    const isHedge = parseHedge(trade.hedge);
+    const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
     const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
-    return isHedge && !isHedge11 && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold");
+    return isHedgeEffective && !isHedge11 && trade.pl_after_comm > 0 && (trade.type === "running" || trade.type === "hedge_hold");
   })
   .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeActiveRunningMinus = filteredTradeData 
   .filter(trade => {
-    const isHedge = parseHedge(trade.hedge);
+    const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
     const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
-    return isHedge && !isHedge11 && trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold");
+    return isHedgeEffective && !isHedge11 && trade.pl_after_comm < 0 && (trade.type === "running" || trade.type === "hedge_hold");
   })
   .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
   const hedgeActiveRunningTotal = filteredTradeData
   .filter(trade => {
-    const isHedge = parseHedge(trade.hedge);
+    const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
     const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
-    return isHedge && !isHedge11 && (trade.type === "running" || trade.type === "hedge_hold");
+    return isHedgeEffective && !isHedge11 && (trade.type === "running" || trade.type === "hedge_hold");
   })
   .reduce((sum, trade) => sum + (parseFloat(trade.pl_after_comm) || 0), 0);
 
@@ -916,8 +919,8 @@ Total_Running_Stats: (
             &nbsp;
             <span title="Running Count (only Direct)" className={`relative px-[3px] text-yellow-300 font-semibold  font-semibold`} style={{ fontSize: `${30 + (fontSizeLevel - 8) * 5}px` }}>
                 {filteredTradeData.filter(trade => {
-                  const isHedge = parseHedge(trade.hedge);
-                  return (trade.type === "running" || trade.type === "hedge_hold") && !isHedge;
+                  const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
+                  return trade.type === "running" && !isHedgeEffective;
                 }).length}
               </span>
               
@@ -950,9 +953,9 @@ Total_Running_Stats: (
                 title="Running Hedge Count"
               >
                 {filteredTradeData.filter(trade => {
-                  const isHedge = parseHedge(trade.hedge);
+                  const isHedgeEffective = parseHedge(trade.hedge) || trade.type === "hedge_hold";
                   const isHedge11 = parseBoolean(trade.hedge_1_1_bool);
-                  return !isHedge11 && isHedge && (trade.type === "running" || trade.type === "hedge_hold");
+                  return !isHedge11 && isHedgeEffective && (trade.type === "running" || trade.type === "hedge_hold");
                 }).length}
               </span>
 
