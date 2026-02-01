@@ -128,6 +128,7 @@ const App = () => {
   const [logData, setLogData] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [machines, setMachines] = useState([]);
+  const [activeLoss, setActiveLoss] = useState({ buy: null, sell: null, updated_at: null });
   const [signalRadioMode, setSignalRadioMode] = useState(false);
   const [machineRadioMode, setMachineRadioMode] = useState(() => {
     const saved = localStorage.getItem("machineRadioMode");
@@ -335,6 +336,29 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       const emaRes = await fetch(`${API_BASE_URL}/api/pairstatus`);
       const emaJson = emaRes.ok ? await emaRes.json() : null;
       setEmaTrends(emaJson);
+
+      // Fetch active_loss BUY/SELL status (best-effort; supports two possible endpoints)
+      let lossObj = null;
+      try {
+        const res1 = await fetch(`${API_BASE_URL}/api/active_loss`);
+        if (res1.ok) {
+          lossObj = await res1.json();
+        } else {
+          const res2 = await fetch(`${API_BASE_URL}/api/active-loss`);
+          lossObj = res2.ok ? await res2.json() : null;
+        }
+      } catch {}
+      // Accept either { buy, sell, updated_at } or { data: { ... } }
+      const parsedLoss = lossObj?.data ? lossObj.data : lossObj;
+      if (parsedLoss && (parsedLoss.buy !== undefined || parsedLoss.sell !== undefined)) {
+        setActiveLoss({
+          buy: parsedLoss.buy,
+          sell: parsedLoss.sell,
+          updated_at: parsedLoss.updated_at || parsedLoss.updatedAt || null,
+        });
+      } else {
+        setActiveLoss({ buy: null, sell: null, updated_at: null });
+      }
 
       // Build unified machine list (machines endpoint + trades machine ids)
       const tradeMachineIds = Array.from(
@@ -1330,6 +1354,7 @@ useEffect(() => {
                       setSelectedIntervals={setSelectedIntervals}
                       selectedActions={selectedActions}
                       setSelectedActions={setSelectedActions}
+                      activeLoss={activeLoss}
                       fromDate={fromDate}
                       toDate={toDate}
                       setFromDate={setFromDate}

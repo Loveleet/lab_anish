@@ -184,6 +184,21 @@ app.get("/api/pairstatus", async (req, res) => {
   }
 });
 
+// ✅ API: Active Loss flags (buy/sell) for condition banner
+app.get("/api/active_loss", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    if (!pool) throw new Error("Database not connected");
+    const result = await pool.query(
+      "SELECT buy, sell, updated_at FROM active_loss WHERE id = 1;"
+    );
+    res.json(result.rows[0] || {});
+  } catch (error) {
+    console.error("❌ Query Error (/api/active_loss):", error.message);
+    res.status(500).json({ error: error.message || "Failed to fetch active_loss" });
+  }
+});
+
 // ✅ Binance Proxy Endpoint
 const LOCAL_PROXY =
   process.env.NODE_ENV === 'production'

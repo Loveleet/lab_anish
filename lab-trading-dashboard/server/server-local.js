@@ -130,6 +130,22 @@ app.get("/api/machines", async (req, res) => {
   }
 });
 
+// ✅ API: Active Loss flags (buy/sell) for condition banner
+app.get("/api/active_loss", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT buy, sell, updated_at FROM active_loss WHERE id = 1;"
+    );
+    res.json(result.rows[0] || {});
+  } catch (error) {
+    console.error("❌ [active_loss] Error:", error.message);
+    res.status(500).json({ 
+      error: error.message,
+      hint: "Check if 'active_loss' table exists in the database"
+    });
+  }
+});
+
 // ✅ API: Test Database Tables
 app.get("/api/tables", async (req, res) => {
   try {

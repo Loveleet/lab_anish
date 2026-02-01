@@ -24,6 +24,7 @@ const TradeFilterPanel = ({
   setSelectedIntervals,
   selectedActions,
   setSelectedActions,
+  activeLoss,
   fromDate,
   toDate,
   setFromDate,
@@ -47,6 +48,14 @@ const TradeFilterPanel = ({
   assignedCount,
   dateKey
 }) => {
+  const toBool = (v) => {
+    if (v === true || v === "true" || v === 1 || v === "1") return true;
+    if (typeof v === "string") {
+      const n = parseFloat(v);
+      return !Number.isNaN(n) && n > 0;
+    }
+    return false;
+  };
   const toMachineKey = (id) => (id === null || id === undefined ? "" : String(id));
   // --- Helper functions for toggling checkboxes/radios in the copied block ---
   // Only define if not present (for this component scope)
@@ -346,6 +355,24 @@ const TradeFilterPanel = ({
             <span className="mr-2">🛒</span> Action
             <span className="absolute left-0 bottom-0 w-full h-1 rounded bg-gradient-to-r from-pink-400 via-pink-300 to-pink-500 opacity-70 group-hover:opacity-100 group-hover:scale-x-110 transition-all"></span>
           </span>
+          {/* Live condition indicator beside Action header */}
+          {activeLoss && (activeLoss.buy !== null || activeLoss.sell !== null) && (
+            <div className="flex items-center gap-1 ml-2">
+              <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Condition:</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${toBool(activeLoss.buy) ? "bg-green-500 text-white animate-pulse ring-2 ring-green-300" : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}
+                title={`BUY ${toBool(activeLoss.buy) ? "ON" : "OFF"}`}
+              >
+                BUY {toBool(activeLoss.buy) ? "ON" : "OFF"}
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${toBool(activeLoss.sell) ? "bg-red-500 text-white animate-pulse ring-2 ring-red-300" : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}
+                title={`SELL ${toBool(activeLoss.sell) ? "ON" : "OFF"}`}
+              >
+                SELL {toBool(activeLoss.sell) ? "ON" : "OFF"}
+              </span>
+            </div>
+          )}
           <button
             onClick={() => {
               const toggled = !actionRadioMode;
