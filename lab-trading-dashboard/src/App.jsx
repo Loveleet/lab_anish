@@ -117,6 +117,7 @@ const parseBoolean = (value) => {
 const App = () => {
   const [superTrendData, setSuperTrendData] = useState([]);
   const [emaTrends, setEmaTrends] = useState(null);
+  const [activeLossFlags, setActiveLossFlags] = useState(null);
   // Expose superTrendData for focused debugging (must be at top level, not inside render logic)
   useEffect(() => {
     window._superTrendData = superTrendData;
@@ -128,7 +129,6 @@ const App = () => {
   const [logData, setLogData] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [machines, setMachines] = useState([]);
-  const [activeLoss, setActiveLoss] = useState({ buy: null, sell: null, updated_at: null });
   const [signalRadioMode, setSignalRadioMode] = useState(false);
   const [machineRadioMode, setMachineRadioMode] = useState(() => {
     const saved = localStorage.getItem("machineRadioMode");
@@ -337,27 +337,13 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       const emaJson = emaRes.ok ? await emaRes.json() : null;
       setEmaTrends(emaJson);
 
-      // Fetch active_loss BUY/SELL status (best-effort; supports two possible endpoints)
-      let lossObj = null;
+      // Fetch BUY/SELL live flags
       try {
-        const res1 = await fetch(`${API_BASE_URL}/api/active_loss`);
-        if (res1.ok) {
-          lossObj = await res1.json();
-        } else {
-          const res2 = await fetch(`${API_BASE_URL}/api/active-loss`);
-          lossObj = res2.ok ? await res2.json() : null;
-        }
-      } catch {}
-      // Accept either { buy, sell, updated_at } or { data: { ... } }
-      const parsedLoss = lossObj?.data ? lossObj.data : lossObj;
-      if (parsedLoss && (parsedLoss.buy !== undefined || parsedLoss.sell !== undefined)) {
-        setActiveLoss({
-          buy: parsedLoss.buy,
-          sell: parsedLoss.sell,
-          updated_at: parsedLoss.updated_at || parsedLoss.updatedAt || null,
-        });
-      } else {
-        setActiveLoss({ buy: null, sell: null, updated_at: null });
+        const flagsRes = await fetch(`${API_BASE_URL}/api/active-loss`);
+        const flagsJson = flagsRes.ok ? await flagsRes.json() : null;
+        setActiveLossFlags(flagsJson || null);
+      } catch {
+        setActiveLossFlags(null);
       }
 
       // Build unified machine list (machines endpoint + trades machine ids)
@@ -1354,7 +1340,6 @@ useEffect(() => {
                       setSelectedIntervals={setSelectedIntervals}
                       selectedActions={selectedActions}
                       setSelectedActions={setSelectedActions}
-                      activeLoss={activeLoss}
                       fromDate={fromDate}
                       toDate={toDate}
                       setFromDate={setFromDate}
@@ -1437,6 +1422,38 @@ useEffect(() => {
         ➕
       </button>
     </div>
+
+    {/* Live condition badges (BUY/SELL) */}
+    {(() => {
+      const toBool = (v) => {
+        if (v === true || v === "true" || v === 1 || v === "1") return true;
+        if (typeof v === "string") {
+          const n = parseFloat(v);
+          if (!Number.isNaN(n)) return n > 0;
+        }
+        return false;
+      };
+      const buy = toBool(activeLossFlags?.buy ?? activeLossFlags?.buy_condition ?? activeLossFlags?.buyflag);
+      const sell = toBool(activeLossFlags?.sell ?? activeLossFlags?.sell_condition ?? activeLossFlags?.sellflag);
+      const Badge = ({ label, on }) => (
+        <span
+          className={`px-2 py-1 rounded-full text-xs font-bold border ${
+            on
+              ? "bg-green-500/90 text-white border-green-600 animate-pulse ring-2 ring-green-300"
+              : "bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+          }`}
+          title={`${label} condition ${on ? "ACTIVE" : "inactive"}`}
+        >
+          {on ? `LIVE ${label}` : `${label} OFF`}
+        </span>
+      );
+      return (
+        <div className="flex items-center gap-2 ml-1">
+          <Badge label="BUY" on={buy} />
+          <Badge label="SELL" on={sell} />
+        </div>
+      );
+    })()}
 
     <span className="text-green-600 text-[14px] md:text-[16px] lg:text-[18px] font-bold">
       ➤ Assigned New:
