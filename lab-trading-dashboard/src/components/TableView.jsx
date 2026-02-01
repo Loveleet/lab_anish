@@ -33,6 +33,7 @@ const parseBoolean = (value) => {
 
 // ReportList.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import moment from "moment";
 
 import * as XLSX from "xlsx";
 import { Home, BarChart, FileText, Menu } from "lucide-react";
@@ -45,15 +46,41 @@ const safeFixed = (val, digits = 2, prefix = "") => {
 };
 
 
+// Format timestamp to "YYYY-MM-DD HH:mm:ss" (UTC). Falls back gracefully.
+const formatDateTime = (ts) => {
+  if (!ts) return "N/A";
+  // Try moment UTC formatting first
+  const m = moment.utc(ts);
+  if (m.isValid()) return m.format("YYYY-MM-DD HH:mm:ss");
+  // Fallback: basic cleanup of ISO-like strings
+  try {
+    return String(ts).replace("T", " ").replace("Z", "");
+  } catch {
+    return String(ts);
+  }
+};
+
+const formatDateOnly = (ts) => {
+  if (!ts) return "N/A";
+  const m = moment.utc(ts);
+  if (m.isValid()) return m.format("YYYY-MM-DD");
+  try {
+    const s = String(ts).replace("T", " ").replace("Z", "");
+    return s.split(" ")[0] || s;
+  } catch {
+    return String(ts);
+  }
+};
+
 const formatTradeData = (trade, index) => ({
   "S No": index + 1,
   "M.Id": trade.machineid || "N/A",
   "📋": "copy", // Copy button column
   Unique_ID: trade.unique_id || "N/A",
   macd_action: trade.macd_action ?? trade.MACD_Action ?? trade.macdAction ?? "N/A",
-  "Candle_🕒": trade.candel_time,
-  "Fetcher_🕒": trade.fetcher_trade_time,
-  "Operator_🕒": trade.operator_trade_time,
+  "Candle_🕒": formatDateTime(trade.candel_time),
+  "Fetcher_🕒": formatDateTime(trade.fetcher_trade_time),
+  "Operator_🕒": formatDateTime(trade.operator_trade_time),
   Pair: trade.pair
     ? `<div style="display:flex; flex-direction:column; align-items:center;">
         <a href="https://www.binance.com/en/futures/${trade.pair}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:underline;">${trade.pair}</a>
@@ -100,7 +127,8 @@ const formatTradeData = (trade, index) => ({
   Sell_PL: safeFixed(trade.sell_pl, 6),
   Close_Price: safeFixed(trade.close_price, 6),
   Commission: safeFixed(trade.commission, 2, "$"),
-  Date: trade.candel_time ? trade.candel_time.split(" ")[0] : "N/A",
+  "Operator_🕒❌": formatDateTime(trade.operator_close_time),
+  Date: formatDateOnly(trade.candel_time),
   Swing1: safeFixed(trade.swing1, 6),
   Swing2: safeFixed(trade.swing2, 6),
   Swing3: safeFixed(trade.swing3, 6),
