@@ -50,6 +50,7 @@ const formatTradeData = (trade, index) => ({
   "M.Id": trade.machineid || "N/A",
   "📋": "copy", // Copy button column
   Unique_ID: trade.unique_id || "N/A",
+  macd_action: trade.macd_action ?? trade.MACD_Action ?? trade.macdAction ?? "N/A",
   "Candle_🕒": trade.candel_time,
   "Fetcher_🕒": trade.fetcher_trade_time,
   "Operator_🕒": trade.operator_trade_time,
