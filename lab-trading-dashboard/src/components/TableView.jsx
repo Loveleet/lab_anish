@@ -96,7 +96,7 @@ const formatTradeData = (trade, index) => ({
   "🛡️_BUY": safeFixed(trade.hedge_buy_pl, 2),
   "🛡️_SELL": safeFixed(trade.hedge_sell_pl, 2),
   Type: trade.type || "N/A",
-  "Operator_🕒❌": trade.operator_close_time,
+  "Operator_🕒❌": formatDateTime(trade.operator_close_time),
   "📡": trade.signalfrom || "N/A",
   PJ: (() => {
     const val = trade.profit_journey;
@@ -127,7 +127,6 @@ const formatTradeData = (trade, index) => ({
   Sell_PL: safeFixed(trade.sell_pl, 6),
   Close_Price: safeFixed(trade.close_price, 6),
   Commission: safeFixed(trade.commission, 2, "$"),
-  "Operator_🕒❌": formatDateTime(trade.operator_close_time),
   Date: formatDateOnly(trade.candel_time),
   Swing1: safeFixed(trade.swing1, 6),
   Swing2: safeFixed(trade.swing2, 6),
