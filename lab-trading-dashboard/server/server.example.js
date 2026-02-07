@@ -1,3 +1,7 @@
+/**
+ * Backend template — no credentials. On the cloud this file is deployed as server.js.
+ * DB credentials are set only in /etc/lab-trading-dashboard.env on the server (never in Git).
+ */
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
@@ -5,23 +9,18 @@ const axios = require('axios');
 
 const app = express();
 const fs = require("fs");
+const path = require("path");
 let currentLogPath = "D:/Projects/blockchainProject/pythonProject/Binance/Loveleet_Anish_Bot/LAB-New-Logic/hedge_logs";
 const PORT = process.env.PORT || 10000;
 const ENABLE_SELF_PING = String(process.env.ENABLE_SELF_PING || '').toLowerCase() === 'true';
 const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'true';
 
-// ✅ Allowed Frontend Origins (Local + Vercel + Render)
+// ✅ Allowed Frontend Origins (local dev + cloud server only; no Render)
 const allowedOrigins = [
-  "http://localhost:5173", // Local Vite
-  "http://localhost:5174", 
-  "https://lab-anish.vercel.app",
-  "https://lab-anish2.onrender.com/api/trades",// Alternate local Vite
-  "https://lab-anish2.onrender.com", // Your backend (if you ever serve frontend from here)
-  "https://lab-anish.vercel.app", // Vercel frontend
-  "https://lab-anish2.onrender.com", // Alternate Render frontend
-  "https://lab-code-4kbs-git-lab-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
-  "https://lab-code-4kbs-q77fv3aml-loveleets-projects-ef26b22c.vercel.app/", // Vercel preview
-  // Add any other frontend URLs you use here
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:10000",
+  "http://150.241.244.130:10000", // Cloud server (this app)
 ];
 
 // ✅ Proper CORS Handling
@@ -30,13 +29,6 @@ app.use(cors({
     try {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      // Allow Vercel preview domains for this project
-      // Example: https://lab-code-4kbs-xxxxxxxxx-loveleets-projects-ef26b22c.vercel.app
-      const u = new URL(origin);
-      const host = u.hostname || '';
-      if (host.endsWith('.vercel.app') && host.includes('lab-code-4kbs')) {
-        return callback(null, true);
-      }
       console.error("❌ CORS blocked origin:", origin);
       return callback(new Error("CORS not allowed for this origin"));
     } catch (e) {
@@ -65,19 +57,38 @@ app.use("/logs", (req, res, next) => {
   express.static(currentLogPath)(req, res, next);
 });
 
-// ✅ Database Configuration - Force cloud database (ignore env vars temporarily)
+// ✅ Database Configuration — database is on same server as app, so always use localhost (not IP). Credentials from env only.
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbConfig = {
+  host: (dbHost === '150.241.244.130' ? 'localhost' : dbHost),
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'labdb2',
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 10,
+};
 
-
-// ✅ Retry PostgreSQL Connection Until Successful
-async function connectWithRetry() {
-  const configs = [
-    // Try with SSL first (production setting)
+// ✅ Retry PostgreSQL Connection Until Successful (try non-SSL first when using localhost)
+function getConnectionConfigs() {
+  const isLocal = !dbConfig.host || dbConfig.host === 'localhost' || dbConfig.host === '127.0.0.1';
+  if (isLocal) {
+    return [
+      { ...dbConfig, ssl: false },
+      { ...dbConfig, ssl: { rejectUnauthorized: false } },
+      { ...dbConfig, ssl: { rejectUnauthorized: false, sslmode: 'require' } },
+    ];
+  }
+  return [
     { ...dbConfig, ssl: { rejectUnauthorized: false } },
-    // Try with require SSL
     { ...dbConfig, ssl: { rejectUnauthorized: false, sslmode: 'require' } },
-    // Try without SSL as fallback
-    { ...dbConfig, ssl: false }
+    { ...dbConfig, ssl: false },
   ];
+}
+
+async function connectWithRetry() {
+  const configs = getConnectionConfigs();
 
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
@@ -114,8 +125,8 @@ async function connectWithRetry() {
 
 let poolPromise = connectWithRetry();
 
-// ✅ Health Check Route
-app.get("/", (req, res) => {
+// ✅ Health Check (for monitoring)
+app.get("/api/health", (req, res) => {
   res.send("✅ Backend is working!");
 });
 
@@ -135,11 +146,16 @@ app.get("/api/supertrend", async (req, res) => {
     res.status(500).json({ error: error.message || "Failed to fetch SuperTrend data" });
   }
 });
+// Helper: true if error is "table does not exist"
+function isMissingTable(err) {
+  return err && (err.code === "42P01" || (err.message && err.message.includes("does not exist")));
+}
+
 app.get("/api/trades", async (req, res) => {
   try {
     if (VERBOSE_LOG) console.log("🔍 [Trades] Request received");
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
+    if (!pool) return res.json({ trades: [] });
     const result = await pool.query("SELECT * FROM alltraderecords;");
     if (VERBOSE_LOG) {
       console.log("🔍 [Trades] Fetched", result.rows.length, "trades");
@@ -147,6 +163,7 @@ app.get("/api/trades", async (req, res) => {
     }
     res.json({ trades: result.rows });
   } catch (error) {
+    if (isMissingTable(error)) return res.json({ trades: [] });
     console.error("❌ [Trades] Error:", error);
     res.status(500).json({ error: error.message || "Failed to fetch trades" });
   }
@@ -156,10 +173,11 @@ app.get("/api/trades", async (req, res) => {
 app.get("/api/machines", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
+    if (!pool) return res.json({ machines: [] });
     const result = await pool.query("SELECT machineid, active FROM machines;");
     res.json({ machines: result.rows });
   } catch (error) {
+    if (isMissingTable(error)) return res.json({ machines: [] });
     console.error("❌ Query Error (/api/machines):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch machines" });
   }
@@ -169,7 +187,7 @@ app.get("/api/machines", async (req, res) => {
 app.get("/api/pairstatus", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
+    if (!pool) return res.json({});
     const result = await pool.query(`
       SELECT overall_ema_trend_1m, overall_ema_trend_percentage_1m,
              overall_ema_trend_5m, overall_ema_trend_percentage_5m,
@@ -179,6 +197,7 @@ app.get("/api/pairstatus", async (req, res) => {
     `);
     res.json(result.rows[0] || {});
   } catch (error) {
+    if (isMissingTable(error)) return res.json({});
     console.error("❌ Query Error (/api/pairstatus):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch pairstatus" });
   }
@@ -186,29 +205,32 @@ app.get("/api/pairstatus", async (req, res) => {
 
 // ✅ API: Fetch Active Loss/Condition flags (e.g., BUY/SELL booleans)
 // Expected table: active_loss with columns like buy, sell (bool/int/text) where id=1
+const defaultActiveLoss = { id: 1, buy: false, sell: false, buy_condition: false, sell_condition: false, buyflag: false, sellflag: false };
 app.get("/api/active-loss", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
+    if (!pool) {
+      return res.json(defaultActiveLoss);
+    }
     const result = await pool.query(`
       SELECT *
       FROM active_loss
       WHERE id = 1
       LIMIT 1;
     `);
-    const row = result.rows?.[0] || {};
+    const row = result.rows?.[0] || defaultActiveLoss;
     res.json(row);
   } catch (error) {
+    if (error.code === "42P01" || (error.message && error.message.includes("does not exist"))) {
+      return res.json(defaultActiveLoss);
+    }
     console.error("❌ Query Error (/api/active-loss):", error.message);
     res.status(500).json({ error: error.message || "Failed to fetch active loss flags" });
   }
 });
 
-// ✅ Binance Proxy Endpoint
-const LOCAL_PROXY =
-  process.env.NODE_ENV === 'production'
-    ? 'https://lab-anish.onrender.com/api/klines'
-    : 'http://localhost:10000/api/klines';
+// ✅ Binance Proxy Endpoint (always use local/cloud server, no Render)
+const LOCAL_PROXY = `http://localhost:${process.env.PORT || 10000}/api/klines`;
 
 app.get('/api/klines', async (req, res) => {
   try {
@@ -783,16 +805,27 @@ app.get("/api/SignalProcessingLogsByUIDs", async (req, res) => {
   }
 });
 
+// ✅ Serve frontend (dashboard) from dist when present
+const distPath = path.join(__dirname, "..", "dist");
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(distPath, "index.html"), (err) => err && next());
+  });
+}
+
 // ✅ Start Express Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
-const http = require("https");
+const http = require("http");
 
-// Self-Ping to Prevent Render Sleep (every 14 minutes) — gated by env
+// Self-ping this server (cloud local) to keep warm — gated by env
 if (ENABLE_SELF_PING) {
+  const pingUrl = `http://127.0.0.1:${PORT}/api/health`;
   setInterval(() => {
-    http.get("https://lab-anish.onrender.com/api/machines", (res) => {
+    http.get(pingUrl, (res) => {
       if (VERBOSE_LOG) console.log(`📡 Self-ping status: ${res.statusCode}`);
     }).on("error", (err) => {
       console.error("❌ Self-ping failed:", err.message);

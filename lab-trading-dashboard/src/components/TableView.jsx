@@ -33,6 +33,7 @@ const parseBoolean = (value) => {
 
 // ReportList.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import moment from "moment";
 
 import * as XLSX from "xlsx";
@@ -212,6 +213,7 @@ const TableView =  ({ title, tradeData, clientData, activeSubReport, setActiveSu
   }, [clientData]);
 
   const [filteredData, setFilteredData] = useState([]);
+  const [filteredRawTrades, setFilteredRawTrades] = useState([]);
   const [sortConfig, setSortConfig] = React.useState({ key: null, direction: 'asc' });
   const [selectedRow, setSelectedRow] = useState(null);
   const [activeFilters, setActiveFilters] = useState({});
@@ -536,9 +538,10 @@ useEffect(() => {
     });
   }
 
-  const cleaned = baseOrder.filter((k) => keys.includes(k));
+  const cleaned = baseOrder.filter((k) => keys.includes(k) || k === "Live");
   const missing = keys.filter((k) => !cleaned.includes(k));
   let finalOrder = [...cleaned, ...missing];
+  if (!finalOrder.includes("Live")) finalOrder.push("Live");
 
   // Ensure Investment always appears before PL
   const investmentIdx = finalOrder.indexOf("Investment");
@@ -574,8 +577,9 @@ const handleColumnDragOver = (e, targetKey) => {
 const resetColumnOrder = () => {
   if (!filteredAndSortedData.length) return;
   const keys = Object.keys(filteredAndSortedData[0]);
-  setColumnOrder(keys);
-  localStorage.setItem(columnOrderKey, JSON.stringify(keys));
+  const order = keys.includes("Live") ? keys : [...keys, "Live"];
+  setColumnOrder(order);
+  localStorage.setItem(columnOrderKey, JSON.stringify(order));
 };
   const sortedData = useMemo(() => {
     if (!sortConfig.key) return filteredData;
@@ -711,6 +715,7 @@ useEffect(() => {
   console.log("🔍 TableView final result length:", result.length);
   console.log("🔍 TableView final result sample:", result.slice(0, 1));
   setFilteredData(result);
+  setFilteredRawTrades(filteredTrades);
 }, [title, tradeData, activeSubReport, clientData, searchInput]);
 
   const handleOpenReport = (title, sortedData, fontSizeLevel = 3) => {
@@ -759,6 +764,22 @@ useEffect(() => {
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
   };
+
+  const stripForCompare = (val) => {
+    if (val == null) return "";
+    const s = typeof val === "string" ? val.replace(/<[^>]+>/g, "").trim() : String(val).trim();
+    return s;
+  };
+  const getRawTrade = useCallback((formattedRow) => {
+    if (!formattedRow || !filteredData.length || !filteredRawTrades.length) return null;
+    const uid = stripForCompare(formattedRow.Unique_ID);
+    if (!uid || uid === "n/a") return null;
+    const idx = filteredData.findIndex((r) => stripForCompare(r.Unique_ID) === uid);
+    return idx >= 0 ? filteredRawTrades[idx] : null;
+  }, [filteredData, filteredRawTrades]);
+
+  const navigate = useNavigate();
+  const isRunningTradesList = filteredRawTrades.length > 0 && filteredRawTrades.every((t) => t.type === "running" || t.type === "hedge_hold");
 
 
 
@@ -1011,6 +1032,15 @@ return (
           <span role="img" aria-label="settings">⚙️</span>
           <span className="text-xs font-semibold hidden sm:inline">Columns</span>
         </button>
+        {isRunningTradesList && (
+          <button
+            onClick={() => navigate("/live-running-trades", { state: { trades: filteredRawTrades, formattedRows: filteredAndSortedData } })}
+            className="bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-400 text-white p-2 rounded flex items-center justify-center gap-1 transition-all duration-150"
+            title="Live show all — bulk actions"
+          >
+            <span className="text-xs font-semibold">Live show all</span>
+          </button>
+        )}
         {selectedRow !== null && (() => {
           const selectedData = filteredAndSortedData[selectedRow] || {};
           const fieldsToDisplay = ["Stop_Price", "Save_Price", "Buy_Price", "Sell_Price"];
@@ -1206,15 +1236,16 @@ return (
           style={{ fontSize: "inherit" }}
         >
           <tr>
-            {(columnOrder.length ? columnOrder : Object.keys(sortedData[0] || {})).map((key, index) => {
-              const isSticky = index < 4; // Updated to include copy column
+            {(columnOrder.length ? columnOrder : [...Object.keys(sortedData[0] || {}), "Live"]).map((key, index) => {
+              const isSticky = index < 4;
               const isCopyColumn = key === "📋";
+              const isLiveColumn = key === "Live";
               return (
                 <th
                   key={key}
-                  onClick={isCopyColumn ? undefined : () => handleSort(key)}   // Copy column is not sortable
+                  onClick={!isCopyColumn && !isLiveColumn ? () => handleSort(key) : undefined}
                   className={`relative px-4 py-2 text-left whitespace-nowrap ${
-                    isCopyColumn ? "cursor-default" : "cursor-pointer"
+                    isCopyColumn || isLiveColumn ? "cursor-default" : "cursor-pointer"
                   } ${
                     index === 0 && "min-w-[50px] max-w-[50px] sticky left-0 bg-teal-700 text-white z-[5]"
                   } ${
@@ -1227,7 +1258,7 @@ return (
                   style={{ fontSize: "inherit" }}
                 >
                   <div className="flex items-center justify-between">
-                    <span>{key.replace(/_/g, " ")}</span>
+                    <span>{isLiveColumn ? "Live" : key.replace(/_/g, " ")}</span>
 
                     {/* Only Visual Sort Icon (no click needed inside it!) - Hide for copy column */}
                     {!isCopyColumn && (
@@ -1244,8 +1275,8 @@ return (
                       </span>
                     )}
 
-                    {/* Filter icon (keep e.stopPropagation() inside only for this) - Hide for copy column */}
-                    {!isCopyColumn && (
+                    {/* Filter icon - Hide for copy and Live columns */}
+                    {!isCopyColumn && !isLiveColumn && (
                       <span
                         className="ml-1 cursor-pointer filter-icon"
                         data-index={index}
@@ -1276,7 +1307,36 @@ return (
                 style={{ fontSize: `${12 + (reportFontSizeLevel - 3) * 2}px` }}
                 onClick={() => setSelectedRow(prev => prev === rowIndex ? null : rowIndex)}
               >
-                {(columnOrder.length ? columnOrder : Object.keys(item)).map((key, colIndex) => {
+                {(columnOrder.length ? columnOrder : [...Object.keys(item), "Live"]).map((key, colIndex) => {
+                  if (key === "Live") {
+                    return (
+                      <td
+                        key={colIndex}
+                        className="px-2 py-1 whitespace-nowrap align-middle text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const raw = getRawTrade(item);
+                            const stateKey = `liveTradeViewState_${Date.now()}`;
+                            try {
+                              localStorage.setItem(stateKey, JSON.stringify({
+                                formattedRow: item,
+                                rawTrade: raw,
+                              }));
+                            } catch (_) {}
+                            const url = `${window.location.origin}${(window.location.pathname || "/").replace(/\/?$/, "")}/live-trade-view?stateKey=${encodeURIComponent(stateKey)}`;
+                            window.open(url, "_blank", "noopener,noreferrer");
+                          }}
+                          className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                          title="Open live trade view in new tab"
+                        >
+                          Live
+                        </button>
+                      </td>
+                    );
+                  }
                   const rawVal = item[key];
                   const val = typeof rawVal === "string" ? rawVal : rawVal != null ? String(rawVal) : "";
                   return key === "Pair" ? (
@@ -1437,4 +1497,5 @@ return (
 };
 
 
+export { formatTradeData };
 export default TableView;

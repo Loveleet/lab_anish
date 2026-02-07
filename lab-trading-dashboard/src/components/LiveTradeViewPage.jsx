@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import SingleTradeLiveView from './SingleTradeLiveView';
 import LiveTradeListViewComponent from './LiveTradeListViewComponent';
 import PairStatsGrid from './PairStatsGrid';
 import PairStatsFilters from './PairStatsFilters';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import * as XLSX from 'xlsx';
-
-// Use same-origin during dev (Vite proxy), Render in production
-const API_BASE_URL = import.meta.env.MODE === 'production' ? 'https://lab-anish.onrender.com' : '';
-const api = (path) => `${API_BASE_URL}${path}`;
+import { api } from '../config';
 
 // loveleet work
 function useQuery() {
@@ -286,8 +284,91 @@ function DroppableLabelList({ items, moveLabel, renderRow, activeJsonLabels, set
   );
 }
 
+// When opening via stateKey (new tab), localStorage might not be ready yet. Retry briefly.
+function LiveTradeViewFromStateKey({ stateKeyFromUrl }) {
+  const [result, setResult] = useState(() => {
+    try {
+      const stored = localStorage.getItem(stateKeyFromUrl);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.formattedRow) return { status: 'ok', formattedRow: parsed.formattedRow, rawTrade: parsed.rawTrade ?? null };
+      }
+    } catch (_) {}
+    return { status: 'pending' };
+  });
+
+  useEffect(() => {
+    if (result.status !== 'pending') return;
+    let attempts = 0;
+    const maxAttempts = 25; // ~2.5s
+    const id = setInterval(() => {
+      attempts++;
+      try {
+        const stored = localStorage.getItem(stateKeyFromUrl);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.formattedRow) {
+            setResult({ status: 'ok', formattedRow: parsed.formattedRow, rawTrade: parsed.rawTrade ?? null });
+            return;
+          }
+        }
+      } catch (_) {}
+      if (attempts >= maxAttempts) setResult({ status: 'failed' });
+    }, 100);
+    return () => clearInterval(id);
+  }, [stateKeyFromUrl, result.status]);
+
+  if (result.status === 'ok') {
+    try {
+      localStorage.removeItem(stateKeyFromUrl);
+    } catch (_) {}
+    return (
+      <SingleTradeLiveView
+        formattedRow={result.formattedRow}
+        rawTrade={result.rawTrade}
+      />
+    );
+  }
+  if (result.status === 'failed') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#0f0f0f] text-white p-4">
+        <p className="text-lg">Could not load trade. The link may have expired.</p>
+        <button
+          type="button"
+          onClick={() => window.close()}
+          className="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700"
+        >
+          Close tab
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0f0f0f] text-white p-4">
+      <p className="text-lg">Opening trade…</p>
+    </div>
+  );
+}
+
 const LiveTradeViewPage = () => {
+  const location = useLocation();
+  const state = location.state || {};
   const query = useQuery();
+  const stateKeyFromUrl = query.get("stateKey");
+
+  if (state.formattedRow) {
+    return (
+      <SingleTradeLiveView
+        formattedRow={state.formattedRow}
+        rawTrade={state.rawTrade ?? null}
+      />
+    );
+  }
+
+  if (stateKeyFromUrl) {
+    return <LiveTradeViewFromStateKey stateKeyFromUrl={stateKeyFromUrl} />;
+  }
+
   const uid = query.get('uid') || '';
   const interval = query.get('interval') || '15m';
   const candleType = query.get('type') || 'Regular';

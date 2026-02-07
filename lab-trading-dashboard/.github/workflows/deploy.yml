@@ -1,0 +1,42 @@
+# Deploy lab-trading-dashboard to Ubuntu VM on push to main.
+# Requires GitHub Secrets: SSH_HOST, SSH_USER, SSH_KEY; optional: SSH_PORT (default 22).
+# One-time server setup: see docs/DEPLOY_DASHBOARD_UBUNTU.md
+
+name: Deploy to Ubuntu
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            REPO_DIR="${{ github.event.repository.name }}"
+            APP_PATH="/opt/apps/${REPO_DIR}"
+            if [ ! -d "$APP_PATH" ]; then
+              echo "Error: $APP_PATH not found. Run server setup first (see docs/DEPLOY_DASHBOARD_UBUNTU.md)."
+              exit 1
+            fi
+            cd "$APP_PATH"
+            if [ -x ./deploy.sh ]; then
+              ./deploy.sh
+            else
+              git fetch origin main
+              git reset --hard origin/main
+              npm ci
+              npm run build
+              cd server && npm ci && cd ..
+              sudo systemctl restart lab-trading-dashboard
+              echo "Deploy done."
+            fi

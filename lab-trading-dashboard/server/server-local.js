@@ -14,20 +14,20 @@ app.use(cors({
 
 app.use(express.json());
 
-// ✅ Database Configuration for Ubuntu Server
+// ✅ Database Configuration (same as Render: use env; default localhost so no IP needed)
 const dbConfig = {
-  user: "postgres",
-  password: "IndiaNepal1-",
-  host: "150.241.245.36",
-  port: 5432,
-  database: "labdb2",
-  ssl: false,
+  user: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASSWORD || "",
+  host: process.env.DB_HOST || "localhost",
+  port: parseInt(process.env.DB_PORT || "5432", 10),
+  database: process.env.DB_NAME || "labdb2",
+  ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
   max: 10,
 };
 
-console.log("🔧 Connecting to PostgreSQL at:", dbConfig.host + ":" + dbConfig.port);
+console.log("🔧 Connecting to PostgreSQL at:", dbConfig.host + ":" + dbConfig.port + "/" + dbConfig.database);
 
 // ✅ Create PostgreSQL Connection Pool
 let pool;
@@ -53,7 +53,7 @@ async function initDatabase() {
     
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
-    console.error("🔧 Make sure PostgreSQL is running and accessible on 150.241.245.36:5432");
+    console.error("🔧 Make sure PostgreSQL is running at", dbConfig.host + ":" + dbConfig.port);
     process.exit(1);
   }
 }

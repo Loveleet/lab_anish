@@ -7,6 +7,7 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
+import { api } from '../config';
 
 // loveleet work
 function useQuery() {
@@ -421,7 +422,7 @@ const GroupViewPage = () => {
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-anish.onrender.com/api/machines');
+        const res = await fetch(api('/api/machines'));
         const data = await res.json();
         // Transform the data to match expected format
         const transformedMachines = Array.isArray(data.machines) ? data.machines.map(m => ({
@@ -486,7 +487,7 @@ const GroupViewPage = () => {
   const [actionToggleAll, setActionToggleAll] = useState(() => localStorage.getItem('groupview_action_toggle_all') === 'true');
   useEffect(() => {
     // Fetch all trades like the main grid does, then filter by pair
-    fetch('https://lab-anish.onrender.com/api/trades')
+    fetch(api('/api/trades'))
       .then(res => res.json())
       .then(data => {
         const allTrades = Array.isArray(data.trades) ? data.trades : [];
@@ -549,8 +550,8 @@ const GroupViewPage = () => {
     setCurrentPage(1); // Reset to first page when symbol changes
     // Fetch logs filtered by symbol from the database using existing API with pagination
     const url = symbols.length > 0
-              ? `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?symbols=${encodeURIComponent(symbols.join(','))}&page=1&limit=${logsPerPage}`
-        : `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?page=1&limit=${logsPerPage}`;
+              ? `${api("/api/SignalProcessingLogsWithUniqueId")}?symbols=${encodeURIComponent(symbols.join(','))}&page=1&limit=${logsPerPage}`
+        : `${api('/api/SignalProcessingLogsWithUniqueId')}?page=1&limit=${logsPerPage}`;
     
     console.log('🔍 [GroupViewPage] Fetching logs from URL:', url);
     console.log('🔍 [GroupViewPage] Symbols:', symbols);
@@ -582,8 +583,8 @@ const GroupViewPage = () => {
           // Try fallback to regular SignalProcessingLogs API if no data
           console.log('🔍 [GroupViewPage] Trying fallback API...');
           const fallbackUrl = symbols.length > 0
-            ? `https://lab-anish.onrender.com/api/SignalProcessingLogs?symbol=${encodeURIComponent(symbols.join(','))}&page=1&limit=${logsPerPage}`
-            : `https://lab-anish.onrender.com/api/SignalProcessingLogs?page=1&limit=${logsPerPage}`;
+            ? `${api('/api/SignalProcessingLogs')}?symbol=${encodeURIComponent(symbols.join(','))}&page=1&limit=${logsPerPage}`
+            : `${api('/api/SignalProcessingLogs')}?page=1&limit=${logsPerPage}`;
           
           fetch(fallbackUrl)
             .then(res => res.json())
@@ -636,8 +637,8 @@ const GroupViewPage = () => {
     setWholeDataLoading(true);
     const currentSymbols = query.get('symbols')?.split(',') || [];
     const url = currentSymbols.length > 0
-              ? `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?symbols=${encodeURIComponent(currentSymbols.join(','))}&page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
-        : `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+              ? `${api("/api/SignalProcessingLogsWithUniqueId")}?symbols=${encodeURIComponent(currentSymbols.join(','))}&page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
+        : `${api('/api/SignalProcessingLogsWithUniqueId')}?page=${wholeDataPage}&limit=${logsPerPage}&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
     fetch(url)
       .then(res => res.json())
       .then(data => {
@@ -750,8 +751,8 @@ const GroupViewPage = () => {
     // Refetch data with new page size
     setLogsLoading(true);
             const url = symbols.length > 0
-              ? `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?symbols=${encodeURIComponent(symbols.join(','))}&page=1&limit=${newRowsPerPage}`
-        : `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?page=1&limit=${newRowsPerPage}`;
+              ? `${api("/api/SignalProcessingLogsWithUniqueId")}?symbols=${encodeURIComponent(symbols.join(','))}&page=1&limit=${newRowsPerPage}`
+        : `${api('/api/SignalProcessingLogsWithUniqueId')}?page=1&limit=${newRowsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -778,8 +779,8 @@ const GroupViewPage = () => {
     setCurrentPage(newPage);
     
             const url = symbols.length > 0
-              ? `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?symbols=${encodeURIComponent(symbols.join(','))}&page=${newPage}&limit=${logsPerPage}`
-        : `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?page=${newPage}&limit=${logsPerPage}`;
+              ? `${api("/api/SignalProcessingLogsWithUniqueId")}?symbols=${encodeURIComponent(symbols.join(','))}&page=${newPage}&limit=${logsPerPage}`
+        : `${api('/api/SignalProcessingLogsWithUniqueId')}?page=${newPage}&limit=${logsPerPage}`;
     
     fetch(url)
       .then(res => res.json())
@@ -1868,7 +1869,7 @@ const GroupViewPage = () => {
   useEffect(() => {
     if (!symbolModalOpen && activeSymbols.length && activeSymbols.length !== symbols.length) {
       setUniqueIdLoading(true);
-              axios.get('https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId', {
+              axios.get(api('/api/SignalProcessingLogsWithUniqueId'), {
         params: {
           symbols: activeSymbols.join(','),
           page: uniqueIdPage,
@@ -1970,8 +1971,8 @@ const GroupViewPage = () => {
       // Export all filtered/sorted data from backend
       setExportLoading(true);
               const url = symbols.length > 0
-              ? `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?symbols=${encodeURIComponent(symbols.join(','))}&limit=1000000&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
-        : `https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId?limit=1000000&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
+              ? `${api("/api/SignalProcessingLogsWithUniqueId")}?symbols=${encodeURIComponent(symbols.join(','))}&limit=1000000&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`
+        : `${api('/api/SignalProcessingLogsWithUniqueId')}?limit=1000000&sortKey=${wholeSortKey}&sortDirection=${wholeSortDirection}`;
       console.log('Export whole - API URL:', url);
       try {
         const res = await fetch(url);
@@ -2125,7 +2126,7 @@ const GroupViewPage = () => {
             // On initial render, fetch the first page of /api/SignalProcessingLogsWithUniqueId for all symbols and log the response
   useEffect(() => {
     if (symbols && symbols.length) {
-      axios.get('https://lab-anish.onrender.com/api/SignalProcessingLogsWithUniqueId', {
+      axios.get(api('/api/SignalProcessingLogsWithUniqueId'), {
         params: {
           symbols: symbols.join(','),
           page: 1,
@@ -2148,7 +2149,7 @@ const GroupViewPage = () => {
       // Add more UIDs here if you want to test multiple
     ];
     if (testUIDs.length) {
-              axios.get('https://lab-anish.onrender.com/api/SignalProcessingLogsByUIDs', {
+              axios.get(api('/api/SignalProcessingLogsByUIDs'), {
         params: { uids: testUIDs.join(',') },
       })
         .then(res => {
@@ -2165,7 +2166,7 @@ const GroupViewPage = () => {
     if (tableLogs && tableLogs.length) {
               const selectedUIDs = tableLogs.map(log => log.unique_id).filter(Boolean);
       if (selectedUIDs.length) {
-        axios.get('https://lab-anish.onrender.com/api/SignalProcessingLogsByUIDs', {
+        axios.get(api('/api/SignalProcessingLogsByUIDs'), {
           params: { uids: selectedUIDs.join(',') },
         })
         .then(res => {

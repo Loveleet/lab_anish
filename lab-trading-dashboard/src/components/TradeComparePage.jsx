@@ -2,11 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import moment from "moment";
 import Sidebar from "./Sidebar";
-
-const API_BASE_URL =
-  import.meta.env.MODE === "production"
-    ? "https://lab-anish.onrender.com"
-    : "";
+import { API_BASE_URL } from "../config";
 
 const toKey = (trade) => {
   const symbol = (trade?.pair || trade?.symbol || trade?.PAIR || "").toString().trim().toUpperCase();

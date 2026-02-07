@@ -14,17 +14,16 @@ import PairStatsGrid from "./components/PairStatsGrid";
 import ReportDashboard from './components/ReportDashboard';
 import ListViewPage from './components/ListViewPage';
 import LiveTradeViewPage from './components/LiveTradeViewPage';
+import LiveRunningTradesPage from './components/LiveRunningTradesPage';
+import LoginPage from './components/LoginPage';
+import { isAuthenticated, setAuthenticated, setSession, clearSession, isSessionExpired, isSessionWarningTime, AuthContext, LogoutButton } from './auth';
+
 import GroupViewPage from './pages/GroupViewPage';
 import RefreshControls from './components/RefreshControls';
 import SuperTrendPanel from "./SuperTrendPanel";
 import TradeComparePage from "./components/TradeComparePage";
 import SoundSettings from "./components/SoundSettings";
-
-// Helper to get API base URL
-const API_BASE_URL =
-  import.meta.env.MODE === "production"
-    ? "https://lab-anish.onrender.com"
-    : "";
+import { API_BASE_URL, api } from "./config";
 
 // Animated SVG background for LAB title
 function AnimatedGraphBackground({ width = 400, height = 80, opacity = 0.4 }) {
@@ -114,7 +113,12 @@ const parseBoolean = (value) => {
   return false;
 };
 
+const SESSION_CHECK_INTERVAL_MS = 30 * 1000; // check every 30 seconds
+
 const App = () => {
+  const [isLoggedIn, setLoggedIn] = useState(() => isAuthenticated());
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
+
   const [superTrendData, setSuperTrendData] = useState([]);
   const [emaTrends, setEmaTrends] = useState(null);
   const [activeLossFlags, setActiveLossFlags] = useState(null);
@@ -169,6 +173,23 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem("fontSizeLevel", fontSizeLevel);
   }, [fontSizeLevel]);
+
+  // Session: 1 hour live; 10 mins before expiry show "stay logged in" popup; if not extended, logout
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const id = setInterval(() => {
+      if (isSessionExpired()) {
+        clearSession();
+        setLoggedIn(false);
+        setShowSessionWarning(false);
+        return;
+      }
+      if (isSessionWarningTime()) {
+        setShowSessionWarning(true);
+      }
+    }, SESSION_CHECK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isLoggedIn]);
 
   // -------- Sound / New-Trade settings (non-invasive to filters) --------
   const SOUND_STORAGE_KEY = "soundSettings";
@@ -1255,7 +1276,7 @@ useEffect(() => {
 
   useEffect(() => {
     const fetchTrades = async () => {
-      const res = await fetch('https://lab-anish.onrender.com/api/trades');
+      const res = await fetch(api("/api/trades"));
       const data = await res.json();
       
       setTrades(data.trades || []);
@@ -1263,13 +1284,53 @@ useEffect(() => {
     fetchTrades();
   }, []);
 
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={() => setLoggedIn(true)} />;
+  }
+
+  const authContextValue = {
+    logout: () => {
+      setAuthenticated(false);
+      setLoggedIn(false);
+      setShowSessionWarning(false);
+    },
+  };
+
   return (
+      <AuthContext.Provider value={authContextValue}>
+      {showSessionWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" role="dialog" aria-modal="true" aria-labelledby="session-warning-title">
+          <div className="bg-white dark:bg-[#222] rounded-xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-gray-700 mx-4">
+            <h2 id="session-warning-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Session expiring</h2>
+            <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
+              Your session will expire in 10 minutes. Stay logged in?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => { setAuthenticated(false); setLoggedIn(false); setShowSessionWarning(false); }}
+                className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium"
+              >
+                Log out
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSession(); setShowSessionWarning(false); }}
+                className="px-4 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+              >
+                Stay logged in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <Routes>
         <Route path="/chart-grid" element={<ChartGridPage />} />
         <Route path="/custom-chart-grid" element={<CustomChartGrid trades={filteredTradeData} />} />
         <Route path="/reports" element={<ReportDashboard />} />
         <Route path="/reports/list" element={<ListViewPage />} />
         <Route path="/live-trade-view" element={<LiveTradeViewPage />} />
+        <Route path="/live-running-trades" element={<LiveRunningTradesPage />} />
         <Route path="/pages/group-view" element={<GroupViewPage />} />
         <Route path="/trades" element={<TradeComparePage />} />
         {/* <Route path="/settings" element={<SettingsPage />} /> */}
@@ -1295,6 +1356,7 @@ useEffect(() => {
               >
                 {darkMode ? '🌞' : '🌙'}
               </button>
+              <LogoutButton className="absolute right-36 top-3 z-20 px-2 py-1 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-105 transition-all text-sm font-semibold text-red-600 dark:text-red-400" />
               <button
                 onClick={() => setIsSoundOpen(true)}
                 className="absolute right-24 top-3 z-20 px-2 py-1 rounded-full bg-white/80 dark:bg-gray-800/80 shadow hover:scale-105 transition-all text-sm font-semibold"
@@ -1729,6 +1791,7 @@ useEffect(() => {
           </>
         } />
       </Routes>
+      </AuthContext.Provider>
   );
 };
 

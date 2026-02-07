@@ -2,11 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import { RSI, MACD } from 'technicalindicators';
 import axios from 'axios';
+import { api } from '../config';
 
-const LOCAL_PROXY =
-  process.env.NODE_ENV === 'production'
-    ? 'https://lab-anish.onrender.com/api/klines'
-    : 'http://localhost:10000/api/klines';
+const LOCAL_PROXY = api('/api/klines');
 
 function toUnix(ts) {
   return Math.floor(ts / 1000);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import PairStatsFilters from './PairStatsFilters';
+import { api } from '../config';
 
 const getPairStats = (pair, trades) => {
   const pairTrades = trades.filter(t => t.pair === pair);
@@ -427,7 +428,7 @@ const PairStatsGrid = ({ onPairSelect, candleType, interval, trades = [], select
   useEffect(() => {
     const fetchMachines = async () => {
       try {
-        const res = await fetch('https://lab-anish.onrender.com/api/machines');
+        const res = await fetch(api('/api/machines'));
         const data = await res.json();
         setMachines(Array.isArray(data.machines) ? data.machines : []);
       } catch (e) {
