@@ -17,7 +17,7 @@ fi
 echo "→ Building frontend..."
 npm run build
 
-echo "→ Uploading dist/ and server/server.js to $DEPLOY_HOST ..."
+echo "→ Uploading dist/ and server.example.js (as server.js) to $DEPLOY_HOST ..."
 if [ -n "${DEPLOY_PASSWORD:-}" ]; then
   SSHPASS="$DEPLOY_PASSWORD" sshpass -e rsync -avz -e "ssh -o StrictHostKeyChecking=no" dist/ "$DEPLOY_HOST:/opt/apps/lab-trading-dashboard/dist/"
   SSHPASS="$DEPLOY_PASSWORD" sshpass -e rsync -avz -e "ssh -o StrictHostKeyChecking=no" server/server.example.js "$DEPLOY_HOST:/opt/apps/lab-trading-dashboard/server/server.js"

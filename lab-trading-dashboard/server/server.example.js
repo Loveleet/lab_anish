@@ -1,7 +1,47 @@
 /**
  * Backend template — no credentials. On the cloud this file is deployed as server.js.
- * DB credentials are set only in /etc/lab-trading-dashboard.env on the server (never in Git).
+ * The Node.js server runs on your cloud only (no Render, no Vercel). DB and other secrets
+ * live only in /etc/lab-trading-dashboard.env on the server (never in Git).
  */
+
+// Load env from file so cloud can use DATABASE_URL (systemd may also set EnvironmentFile)
+(function loadEnvFile() {
+  const fs = require("fs");
+  const path = require("path");
+  const tryLoad = (filePath) => {
+    if (!fs.existsSync(filePath)) return;
+    try {
+      const content = fs.readFileSync(filePath, "utf8");
+      content.split("\n").forEach((line) => {
+        const raw = line.trim();
+        if (!raw || raw.startsWith("#")) return;
+        const eq = raw.indexOf("=");
+        if (eq <= 0) return;
+        const key = raw.slice(0, eq).trim();
+        let val = raw.slice(eq + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        } else {
+          const comment = val.indexOf("#");
+          if (comment >= 0) val = val.slice(0, comment).trim();
+        }
+        if (key) process.env[key] = val;
+      });
+      console.log("[env] Loaded", filePath);
+    } catch (e) {
+      console.warn("[env] Could not load", filePath, e.message);
+    }
+  };
+  tryLoad(path.join(process.cwd(), ".env"));
+  tryLoad(path.join(process.cwd(), "..", ".env"));
+  tryLoad("/etc/lab-trading-dashboard.env");
+  if (process.env.DATABASE_URL) {
+    console.log("[env] DATABASE_URL is set — app will use remote DB when connection succeeds");
+  } else {
+    console.log("[env] DATABASE_URL not set — app will use local DB (DB_HOST/DB_*)");
+  }
+})();
+
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
@@ -15,7 +55,7 @@ const PORT = process.env.PORT || 10000;
 const ENABLE_SELF_PING = String(process.env.ENABLE_SELF_PING || '').toLowerCase() === 'true';
 const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'true';
 
-// ✅ Allowed Frontend Origins (local dev + cloud server only; no Render)
+// ✅ Allowed Frontend Origins (local dev + cloud server)
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -57,21 +97,34 @@ app.use("/logs", (req, res, next) => {
   express.static(currentLogPath)(req, res, next);
 });
 
-// ✅ Database Configuration — database is on same server as app, so always use localhost (not IP). Credentials from env only.
-const dbHost = process.env.DB_HOST || 'localhost';
-const dbConfig = {
-  host: (dbHost === '150.241.244.130' ? 'localhost' : dbHost),
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'labdb2',
-  connectionTimeoutMillis: 10000,
-  idleTimeoutMillis: 30000,
-  max: 10,
-};
+// ✅ Database Configuration — same as server copy.js / Render: 150.241.245.36, postgres, IndiaNepal1-, labdb2, ssl: false
+function buildDbConfig() {
+  const dbHost = process.env.DB_HOST || 'localhost';
+  const host = (dbHost === '150.241.244.130' ? 'localhost' : dbHost);
+  const isRemoteDb = host === '150.241.245.36';
+  return {
+    host,
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || (isRemoteDb ? 'IndiaNepal1-' : ''),
+    database: process.env.DB_NAME || 'labdb2',
+    connectionTimeoutMillis: isRemoteDb ? 30000 : 10000,
+    idleTimeoutMillis: 30000,
+    max: isRemoteDb ? 20 : 10,
+  };
+}
+const dbConfig = buildDbConfig();
 
-// ✅ Retry PostgreSQL Connection Until Successful (try non-SSL first when using localhost)
+// ✅ Connection configs: for 150.241.245.36 use exact same single config as server copy.js (Render)
 function getConnectionConfigs() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl) {
+    return [
+      { connectionString: databaseUrl, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 },
+      { connectionString: databaseUrl, ssl: true, connectionTimeoutMillis: 15000 },
+      { connectionString: databaseUrl, ssl: false, connectionTimeoutMillis: 15000 },
+    ];
+  }
   const isLocal = !dbConfig.host || dbConfig.host === 'localhost' || dbConfig.host === '127.0.0.1';
   if (isLocal) {
     return [
@@ -80,6 +133,10 @@ function getConnectionConfigs() {
       { ...dbConfig, ssl: { rejectUnauthorized: false, sslmode: 'require' } },
     ];
   }
+  // 150.241.245.36 — exact same as server copy.js: single config, ssl: false, 30s timeout (Render uses this and gets data)
+  if (dbConfig.host === '150.241.245.36') {
+    return [{ ...dbConfig, ssl: false }];
+  }
   return [
     { ...dbConfig, ssl: { rejectUnauthorized: false } },
     { ...dbConfig, ssl: { rejectUnauthorized: false, sslmode: 'require' } },
@@ -87,83 +144,172 @@ function getConnectionConfigs() {
   ];
 }
 
-async function connectWithRetry() {
+// Stop retrying after 60s so app stays responsive (APIs return "DB not connected" instead of hanging)
+const CONNECT_TIMEOUT_MS = 60000;
+
+async function connectWithRetry(startTime = Date.now()) {
   const configs = getConnectionConfigs();
+  const isConnectionString = !!process.env.DATABASE_URL;
 
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
+    if (Date.now() - startTime > CONNECT_TIMEOUT_MS) {
+      console.error("[DB] Connection timeout. Ensure this server can reach the DB (firewall, pg_hba). Check: journalctl -u lab-trading-dashboard -n 80");
+      return null;
+    }
     try {
-      console.log(`🔧 Attempt ${i + 1}: PostgreSQL connection to:`, `${config.host}:${config.port}/${config.database}`);
-      console.log("🔧 Connection config:", {
-        host: config.host,
-        port: config.port,
-        database: config.database,
-        user: config.user,
-        ssl: !!config.ssl,
-        sslConfig: config.ssl
-      });
-      
+      if (isConnectionString) {
+        console.log(`🔧 Attempt ${i + 1}: PostgreSQL via DATABASE_URL (ssl: ${!!config.ssl})`);
+      } else {
+        console.log(`🔧 Attempt ${i + 1}: PostgreSQL to ${config.host}:${config.port}/${config.database} (same config as Render)`);
+      }
       const pool = new Pool(config);
       await pool.query('SELECT NOW()');
-      console.log(`✅ Connected to PostgreSQL successfully with config ${i + 1}`);
+      console.log(`✅ Connected to PostgreSQL successfully`);
+      const countResult = await pool.query('SELECT count(*) as c FROM alltraderecords').catch(() => ({ rows: [{ c: 0 }] }));
+      const tradeCount = parseInt(countResult.rows[0]?.c || 0, 10);
+      console.log(`[DB] alltraderecords has ${tradeCount} rows — dashboard will show ${tradeCount} trades`);
       return pool;
     } catch (err) {
-      console.error(`❌ PostgreSQL Connection Failed (attempt ${i + 1}):`);
-      console.error("   Error Code:", err.code);
-      console.error("   Error Message:", err.message);
-      
+      console.error(`❌ PostgreSQL connection failed (attempt ${i + 1}):`, err.code || "", err.message);
       if (i === configs.length - 1) {
-        console.error("   All connection attempts failed. Retrying in 5 seconds...");
+        console.error("   Retrying in 5 seconds...");
         await new Promise((resolve) => setTimeout(resolve, 5000));
-        return connectWithRetry();
-      } else {
-        console.log(`   Trying next configuration...`);
+        return connectWithRetry(startTime);
       }
     }
   }
+  return null;
 }
 
 let poolPromise = connectWithRetry();
+
+// ✅ When DB is unreachable, proxy data from Render (same DB Render uses). Set FALLBACK_API_URL in /etc/lab-trading-dashboard.env
+const FALLBACK_API_URL = (process.env.FALLBACK_API_URL || "").trim();
+async function fetchFromFallback(path, queryString = "") {
+  if (!FALLBACK_API_URL) return null;
+  const url = FALLBACK_API_URL.replace(/\/$/, "") + path + (queryString ? "?" + queryString : "");
+  try {
+    const r = await axios.get(url, { timeout: 20000, validateStatus: () => true });
+    if (r.status !== 200) return null;
+    return r.data;
+  } catch (e) {
+    console.warn("[Fallback]", path, e.code || e.message);
+    return null;
+  }
+}
 
 // ✅ Health Check (for monitoring)
 app.get("/api/health", (req, res) => {
   res.send("✅ Backend is working!");
 });
 
-// ✅ API: Fetch All Trades
-// ✅ API: Fetch SuperTrend Signals
-app.get("/api/supertrend", async (req, res) => {
+// ✅ Debug: table row counts + DB source (no secrets) — explains why cloud shows fewer trades
+app.get("/api/debug", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
-    const result = await pool.query(
-      'SELECT source, trend, timestamp FROM supertrend ORDER BY timestamp DESC LIMIT 10;'
-    );
-    console.log("[SuperTrend API] Rows returned:", result.rows);
-    res.json({ supertrend: result.rows });
-  } catch (error) {
-    console.error("❌ [SuperTrend] Error:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch SuperTrend data" });
+    if (!pool) {
+      if (FALLBACK_API_URL) {
+        const debug = await fetchFromFallback("/api/debug");
+        if (debug && debug.ok) return res.json({ ...debug, dbSource: (debug.dbSource || "remote") + " (via fallback)" });
+        const trades = await fetchFromFallback("/api/trades");
+        const machines = await fetchFromFallback("/api/machines");
+        const tn = (trades && trades.trades && trades.trades.length) || (trades && trades._meta && trades._meta.count) || 0;
+        const mn = (machines && machines.machines && machines.machines.length) || 0;
+        if (tn > 0 || mn > 0) {
+          return res.json({ ok: true, counts: { alltraderecords: tn, machines: mn, pairstatus: "n/a" }, dbSource: "fallback:" + FALLBACK_API_URL });
+        }
+      }
+      return res.json({
+        ok: false,
+        error: "Database not connected",
+        dbSource: process.env.DATABASE_URL ? "DATABASE_URL (connection failed or timeout)" : "DB_* / local",
+        hint: "Set FALLBACK_API_URL=https://lab-anish.onrender.com in /etc/lab-trading-dashboard.env and restart to use Render data when DB is unreachable."
+      });
+    }
+    const tables = ["alltraderecords", "machines", "pairstatus"];
+    const counts = {};
+    for (const table of tables) {
+      try {
+        const r = await pool.query(`SELECT count(*) as c FROM ${table}`);
+        counts[table] = parseInt(r.rows[0]?.c ?? 0, 10);
+      } catch (e) {
+        counts[table] = e.code === "42P01" ? "missing" : e.message;
+      }
+    }
+    const tradeCount = typeof counts.alltraderecords === "number" ? counts.alltraderecords : 0;
+    const tradesEmpty = tradeCount === 0 || counts.alltraderecords === "missing";
+    const dbSource = process.env.DATABASE_URL ? "DATABASE_URL (remote)" : "DB_* / local";
+    let hint = null;
+    if (tradesEmpty) {
+      hint = "alltraderecords is empty or missing — set DATABASE_URL (or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME) in /etc/lab-trading-dashboard.env, then restart.";
+    } else if (tradeCount < 50) {
+      hint = "This app is using the local DB with very few rows. To see real data: set DATABASE_URL (or DB_*) in /etc/lab-trading-dashboard.env to your Postgres URL and restart.";
+    }
+    res.json({ ok: true, counts, dbSource, hint });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
   }
 });
+
+// ✅ API: Fetch All Trades
 // Helper: true if error is "table does not exist"
 function isMissingTable(err) {
   return err && (err.code === "42P01" || (err.message && err.message.includes("does not exist")));
 }
 
+// ✅ API: Fetch SuperTrend Signals (return empty if table missing or DB not connected — avoid 500)
+app.get("/api/supertrend", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    if (!pool) {
+      const fallback = await fetchFromFallback("/api/supertrend");
+      if (fallback && (fallback.supertrend || Array.isArray(fallback.supertrend))) return res.json(fallback);
+      return res.json({ supertrend: [] });
+    }
+    const result = await pool.query(
+      'SELECT source, trend, timestamp FROM supertrend ORDER BY timestamp DESC LIMIT 10;'
+    );
+    res.json({ supertrend: result.rows || [] });
+  } catch (error) {
+    if (isMissingTable(error)) {
+      return res.json({ supertrend: [] });
+    }
+    console.error("❌ [SuperTrend] Error:", error.message);
+    res.status(500).json({ error: error.message || "Failed to fetch SuperTrend data" });
+  }
+});
+
+// No LIMIT — return all rows from the configured DB.
 app.get("/api/trades", async (req, res) => {
   try {
-    if (VERBOSE_LOG) console.log("🔍 [Trades] Request received");
     const pool = await poolPromise;
-    if (!pool) return res.json({ trades: [] });
-    const result = await pool.query("SELECT * FROM alltraderecords;");
-    if (VERBOSE_LOG) {
-      console.log("🔍 [Trades] Fetched", result.rows.length, "trades");
-      console.log("🔍 [Trades] Sample trade:", result.rows[0]);
+    if (!pool) {
+      const fallback = await fetchFromFallback("/api/trades");
+      if (fallback && (fallback.trades || Array.isArray(fallback.trades))) {
+        console.log("[Trades] Fallback:", (fallback.trades || []).length, "rows");
+        return res.json(fallback);
+      }
+      console.log("[Trades] No pool — returning empty");
+      return res.json({ trades: [], _meta: { count: 0, table: "alltraderecords" } });
     }
-    res.json({ trades: result.rows });
+    const result = await pool.query("SELECT * FROM alltraderecords;");
+    const count = result.rows.length;
+    if (count === 0) console.log("[Trades] Table is empty — add data or set DATABASE_URL in /etc/lab-trading-dashboard.env to point to your DB.");
+    else console.log("[Trades] Fetched", count, "rows from alltraderecords");
+    res.json({
+      trades: result.rows,
+      _meta: {
+        count,
+        table: "alltraderecords",
+        ...(count === 0 && { demoData: true, hint: "No rows in alltraderecords. Set DATABASE_URL (or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME) in /etc/lab-trading-dashboard.env on this server to point to your Postgres and restart." })
+      }
+    });
   } catch (error) {
-    if (isMissingTable(error)) return res.json({ trades: [] });
+    if (isMissingTable(error)) {
+      console.log("[Trades] Table alltraderecords missing — returning empty");
+      return res.json({ trades: [], _meta: { count: 0, table: "alltraderecords", error: "table missing" } });
+    }
     console.error("❌ [Trades] Error:", error);
     res.status(500).json({ error: error.message || "Failed to fetch trades" });
   }
@@ -173,7 +319,13 @@ app.get("/api/trades", async (req, res) => {
 app.get("/api/machines", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) return res.json({ machines: [] });
+    if (!pool) {
+      const fallback = await fetchFromFallback("/api/machines");
+      if (fallback && (fallback.machines || Array.isArray(fallback.machines))) {
+        return res.json(fallback);
+      }
+      return res.json({ machines: [] });
+    }
     const result = await pool.query("SELECT machineid, active FROM machines;");
     res.json({ machines: result.rows });
   } catch (error) {
@@ -187,7 +339,11 @@ app.get("/api/machines", async (req, res) => {
 app.get("/api/pairstatus", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) return res.json({});
+    if (!pool) {
+      const fallback = await fetchFromFallback("/api/pairstatus");
+      if (fallback && typeof fallback === "object") return res.json(fallback);
+      return res.json({});
+    }
     const result = await pool.query(`
       SELECT overall_ema_trend_1m, overall_ema_trend_percentage_1m,
              overall_ema_trend_5m, overall_ema_trend_percentage_5m,
@@ -210,6 +366,8 @@ app.get("/api/active-loss", async (req, res) => {
   try {
     const pool = await poolPromise;
     if (!pool) {
+      const fallback = await fetchFromFallback("/api/active-loss");
+      if (fallback && typeof fallback === "object") return res.json(fallback);
       return res.json(defaultActiveLoss);
     }
     const result = await pool.query(`
@@ -229,7 +387,7 @@ app.get("/api/active-loss", async (req, res) => {
   }
 });
 
-// ✅ Binance Proxy Endpoint (always use local/cloud server, no Render)
+// ✅ Binance Proxy Endpoint (local/cloud server)
 const LOCAL_PROXY = `http://localhost:${process.env.PORT || 10000}/api/klines`;
 
 app.get('/api/klines', async (req, res) => {
@@ -677,8 +835,12 @@ app.get("/api/bot-event-logs/summary", async (req, res) => {
 app.get("/api/trades/filtered", async (req, res) => {
   try {
     const pool = await poolPromise;
-    if (!pool) throw new Error("Database not connected");
-    
+    if (!pool) {
+      const qs = Object.entries(req.query).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+      const fallback = await fetchFromFallback("/api/trades/filtered", qs);
+      if (fallback && (fallback.trades || Array.isArray(fallback.trades))) return res.json(fallback);
+      return res.json({ trades: [] });
+    }
     const { pair, limit = 1000 } = req.query;
     let query = "SELECT * FROM alltraderecords";
     let params = [];

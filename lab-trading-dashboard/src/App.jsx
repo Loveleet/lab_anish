@@ -129,6 +129,7 @@ const App = () => {
   const [metrics, setMetrics] = useState(null);
   const [selectedBox, setSelectedBox] = useState(null);
   const [tradeData, setTradeData] = useState([]);
+  const [demoDataHint, setDemoDataHint] = useState(null); // when API returns _meta.demoData, show hint instead of demo rows
   const [clientData, setClientData] = useState([]);
   const [logData, setLogData] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -336,9 +337,10 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
 
   const refreshAllData = useCallback(async () => {
     try {
-      const tradeRes = await fetch(`${API_BASE_URL}/api/trades`);
+      const tradeRes = await fetch(api("/api/trades"));
       const tradeJson = tradeRes.ok ? await tradeRes.json() : { trades: [] };
       const trades = Array.isArray(tradeJson.trades) ? tradeJson.trades : [];
+      setDemoDataHint(tradeJson._meta?.demoData ? tradeJson._meta.hint || null : null);
 
       const machinesRes = await fetch(`${API_BASE_URL}/api/machines`);
       const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
@@ -403,6 +405,7 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       console.log("[DEBUG] Selected machines:", allMachinesSelected);
     } catch (error) {
       setTradeData([]);
+      setDemoDataHint(null);
     }
   }, [toMachineKey]);
 
@@ -1384,6 +1387,22 @@ useEffect(() => {
               <div className={`flex-1 min-h-screen transition-all duration-300 ${isSidebarOpen ? "ml-64" : "ml-20"} overflow-hidden relative bg-[#f5f6fa] dark:bg-black`}>
                 {/* Main content area, no extra margin-top */}
                 <div className="p-8 pt-2 overflow-x-auto">
+                  {demoDataHint && (
+                    <div className="mb-4 p-4 rounded-lg bg-orange-100 dark:bg-orange-900/40 border border-orange-400 dark:border-orange-600 text-orange-900 dark:text-orange-100 text-sm">
+                      <strong className="block mb-2">Get real data on this cloud site</strong>
+                      <p className="mb-2">{demoDataHint}</p>
+                      <ol className="list-decimal list-inside space-y-1 mt-2 text-xs">
+                        <li>On this server edit env: <code className="bg-orange-200/60 dark:bg-orange-800/60 px-1 rounded">sudo nano /etc/lab-trading-dashboard.env</code></li>
+                        <li>Add <code className="bg-orange-200/60 dark:bg-orange-800/60 px-1 rounded">DATABASE_URL=&apos;postgres://user:pass@host:5432/dbname&apos;</code> (your Postgres URL) or set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME</li>
+                        <li>Restart: <code className="bg-orange-200/60 dark:bg-orange-800/60 px-1 rounded">sudo systemctl restart lab-trading-dashboard</code> → wait ~30s and refresh</li>
+                      </ol>
+                    </div>
+                  )}
+                  {Array.isArray(tradeData) && tradeData.length === 0 && !demoDataHint && (
+                    <div className="mb-4 p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-sm">
+                      <strong>No trade records in database.</strong> Table <code className="bg-amber-200/50 dark:bg-amber-800/50 px-1 rounded">alltraderecords</code> is empty. Machines and pairstatus are loading from the same DB. To see trades, add data or copy the database (see docs or <code className="bg-amber-200/50 dark:bg-amber-800/50 px-1 rounded">/api/debug</code> for counts).
+                    </div>
+                  )}
                   <div className="flex justify-end mb-2">
                     <button
                       onClick={() => setFilterVisible((v) => !v)}

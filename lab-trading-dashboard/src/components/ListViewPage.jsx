@@ -430,7 +430,7 @@ const ListViewPage = () => {
     };
     fetchMachines();
   }, []);
-  const allMachines = machines.filter(m => m.Active);
+  const allMachines = machines;
   const [selectedMachines, setSelectedMachines] = useState(() => {
     const saved = localStorage.getItem('pair_stats_selected_machines');
     if (saved) return JSON.parse(saved);

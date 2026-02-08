@@ -38,6 +38,7 @@ const PairStatsFilters = ({
   trades,
   darkMode,
 }) => {
+  const machineId = (m) => m.machineid ?? m.MachineId ?? '';
   // Action list from trades - check multiple possible field names
   const allActions = Array.from(new Set(
     trades.flatMap(t => [
@@ -179,11 +180,11 @@ const PairStatsFilters = ({
               const toggled = !machineRadioMode;
               setMachineRadioMode(toggled);
               if (toggled) {
-                const selected = allMachines.find((m) => selectedMachines[m.MachineId]);
+                const selected = allMachines.find((m) => selectedMachines[machineId(m)]);
                 if (selected) {
                   const updated = {};
                   allMachines.forEach((m) => {
-                    if (m.Active) updated[m.MachineId] = m.MachineId === selected.MachineId;
+                    updated[machineId(m)] = machineId(m) === machineId(selected);
                   });
                   setSelectedMachines(updated);
                   localStorage.setItem('pair_stats_selected_machines', JSON.stringify(updated));
@@ -201,7 +202,7 @@ const PairStatsFilters = ({
                 const allChecked = Object.values(selectedMachines).every(v => v === true);
                 const updated = {};
                 allMachines.forEach(machine => {
-                  if (machine.Active) updated[machine.MachineId] = !allChecked;
+                  updated[machineId(machine)] = !allChecked;
                 });
                 setSelectedMachines(updated);
                 setMachineToggleAll(!machineToggleAll);
@@ -223,16 +224,16 @@ const PairStatsFilters = ({
             <span className="text-gray-400 text-xs">No machines found</span>
           ) : (
             allMachines.map((machine) => (
-              <label key={machine.MachineId} className="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-700">
+              <label key={machineId(machine)} className="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-700">
                 {machineRadioMode ? (
                   <input
                     type="radio"
                     name="machineFilterRadio"
-                    checked={selectedMachines[machine.MachineId] === true}
+                    checked={selectedMachines[machineId(machine)] === true}
                     onChange={() => {
                       const updated = {};
                       allMachines.forEach((m) => {
-                        if (m.Active) updated[m.MachineId] = m.MachineId === machine.MachineId;
+                        updated[machineId(m)] = machineId(m) === machineId(machine);
                       });
                       setSelectedMachines(updated);
                       localStorage.setItem('pair_stats_selected_machines', JSON.stringify(updated));
@@ -243,10 +244,10 @@ const PairStatsFilters = ({
                 ) : (
                   <input
                     type="checkbox"
-                    checked={selectedMachines[machine.MachineId] || false}
+                    checked={selectedMachines[machineId(machine)] || false}
                     onChange={() => {
                       setSelectedMachines(prev => {
-                        const updated = { ...prev, [machine.MachineId]: !prev[machine.MachineId] };
+                        const updated = { ...prev, [machineId(machine)]: !prev[machineId(machine)] };
                         localStorage.setItem('pair_stats_selected_machines', JSON.stringify(updated));
                         return updated;
                       });
@@ -254,7 +255,7 @@ const PairStatsFilters = ({
                     className="form-checkbox h-5 w-5 text-green-600"
                   />
                 )}
-                <span className="text-gray-700 dark:text-gray-200 font-semibold">{machine.MachineId}</span>
+                <span className="text-gray-700 dark:text-gray-200 font-semibold">{machineId(machine)}</span>
               </label>
             ))
           )}

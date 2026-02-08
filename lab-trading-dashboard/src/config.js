@@ -1,6 +1,6 @@
 /**
- * API base URL for backend. Empty = same origin (local or cloud server).
- * No Render: we use only localhost (dev) or the cloud server (150.241.244.130:10000).
+ * API base URL for backend. Empty = same origin.
+ * Server runs on your cloud only (Node.js / server.js at 150.241.244.130:10000) or localhost in dev.
  */
 function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE_URL !== undefined) return import.meta.env.VITE_API_BASE_URL;

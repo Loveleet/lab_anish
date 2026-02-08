@@ -438,7 +438,7 @@ const GroupViewPage = () => {
     };
     fetchMachines();
   }, []);
-  const allMachines = machines.filter(m => m.Active);
+  const allMachines = machines;
   const [selectedMachines, setSelectedMachines] = useState(() => {
     const saved = localStorage.getItem('groupview_selected_machines');
     if (saved) return JSON.parse(saved);

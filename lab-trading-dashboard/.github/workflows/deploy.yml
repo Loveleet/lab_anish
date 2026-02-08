@@ -1,6 +1,7 @@
 # Deploy lab-trading-dashboard to Ubuntu VM on push to main.
-# Requires GitHub Secrets: SSH_HOST, SSH_USER, SSH_KEY; optional: SSH_PORT (default 22).
-# One-time server setup: see docs/DEPLOY_DASHBOARD_UBUNTU.md
+# Requires GitHub Secrets: SSH_HOST, SSH_USER, SSH_KEY.
+# Optional: SSH_PORT (default 22), APP_PATH (default /opt/apps/<repo-name>).
+# See docs/GITHUB_AUTO_SYNC.md for step-by-step setup.
 
 name: Deploy to Ubuntu
 
@@ -23,9 +24,10 @@ jobs:
           script: |
             set -e
             REPO_DIR="${{ github.event.repository.name }}"
-            APP_PATH="/opt/apps/${REPO_DIR}"
+            APP_PATH="${{ secrets.APP_PATH }}"
+            [ -z "$APP_PATH" ] && APP_PATH="/opt/apps/${REPO_DIR}"
             if [ ! -d "$APP_PATH" ]; then
-              echo "Error: $APP_PATH not found. Run server setup first (see docs/DEPLOY_DASHBOARD_UBUNTU.md)."
+              echo "Error: $APP_PATH not found. Set secret APP_PATH to your app dir (e.g. /opt/apps/lab-trading-dashboard) or clone repo there."
               exit 1
             fi
             cd "$APP_PATH"
@@ -35,8 +37,10 @@ jobs:
               git fetch origin main
               git reset --hard origin/main
               npm ci
-              npm run build
+              VITE_API_BASE_URL= npm run build
               cd server && npm ci && cd ..
+              cp -f server/server.example.js server/server.js
+              sudo systemctl enable lab-trading-dashboard
               sudo systemctl restart lab-trading-dashboard
               echo "Deploy done."
             fi

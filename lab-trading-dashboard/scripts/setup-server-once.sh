@@ -63,8 +63,10 @@ echo "→ Installing deps and building ..."
 npm ci
 npm run build
 cd server && npm ci && cd ..
+# Server runs server.js; repo has only server.example.js (no secrets in Git). Create server.js from template.
+cp -f server/server.example.js server/server.js
 
-# 4) Env file (placeholder – edit with: sudo nano /etc/lab-trading-dashboard.env)
+# 4) Env file (secrets only here – edit with: sudo nano /etc/lab-trading-dashboard.env)
 if [ ! -f /etc/lab-trading-dashboard.env ]; then
   echo "→ Creating /etc/lab-trading-dashboard.env (edit later if you need PORT or DB vars) ..."
   sudo tee /etc/lab-trading-dashboard.env << 'ENVEOF'
