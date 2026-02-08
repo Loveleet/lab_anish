@@ -4,6 +4,22 @@ To have **https://loveleet.github.io/lab_anish/** show real data (not just the U
 
 ---
 
+## Auto-update GitHub secret when tunnel restarts
+
+**Already on the cloud:** `gh` is installed; `GH_TOKEN=` is in `/etc/lab-trading-dashboard.env`. To enable auto-update:
+
+1. **Create a token:** https://github.com/settings/tokens → Generate new token (classic) → check **repo** (or fine-grained: Actions secrets read/write for Loveleet/lab_anish).
+
+2. **Set it on the cloud** (replace `ghp_YourTokenHere` with your token):
+   ```bash
+   ssh root@150.241.244.130 "sudo sed -i 's/^GH_TOKEN=.*/GH_TOKEN=ghp_YourTokenHere/' /etc/lab-trading-dashboard.env"
+   ```
+   Or on the cloud: `sudo nano /etc/lab-trading-dashboard.env` and set `GH_TOKEN=ghp_xxxx`.
+
+3. **Test:** Restart tunnel and run the script; you should see "Updated GitHub secret API_BASE_URL". Then run **Actions → Deploy frontend to GitHub Pages** once.
+
+---
+
 ## Step 1: Expose the API over HTTPS
 
 **Option 1 – From your laptop (one command):**

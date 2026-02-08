@@ -2,11 +2,11 @@
 # Run on the CLOUD. Reads the tunnel URL from the log and updates GitHub secret API_BASE_URL
 # so GitHub Pages builds use the correct HTTPS API URL. No laptop needed.
 #
-# Requires: GH_TOKEN or GITHUB_TOKEN in env (e.g. from /etc/lab-trading-dashboard.env)
-#   Create at: https://github.com/settings/tokens (repo scope, or fine-grained: Actions secrets write)
+# Requires: GH_TOKEN in /etc/lab-trading-dashboard.env (create at https://github.com/settings/tokens, repo scope)
 # Optional: GITHUB_REPO (default: Loveleet/lab_anish)
 
 set -e
+[ -f /etc/lab-trading-dashboard.env ] && set -a && . /etc/lab-trading-dashboard.env && set +a
 LOG="${1:-/var/log/cloudflared-tunnel.log}"
 REPO="${GITHUB_REPO:-Loveleet/lab_anish}"
 # Wait for URL to appear
