@@ -34,20 +34,30 @@ function getApiBaseUrl() {
 /** Load API URL from api-config.json (used on GitHub Pages so data works after cloud restart). */
 function loadRuntimeApiConfig() {
   if (typeof window === "undefined") return Promise.resolve();
-  // Use app base path (e.g. /lab_anish/) so fetch works on GitHub Pages
   const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
   const basePath = base === "./" || base === "." ? "" : base.replace(/\/$/, "");
   const path = basePath + "/api-config.json";
   const url = new URL(path, window.location.origin).href;
-  return fetch(url, { cache: "no-store" })
-    .then((r) => (r.ok ? r.json() : null))
+  const fetchUrl = url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
+  const isPages = typeof window !== "undefined" && window.location?.hostname?.includes("github.io");
+  if (isPages) console.log("[LAB] Fetching API config:", fetchUrl);
+  return fetch(fetchUrl, { cache: "no-store" })
+    .then((r) => {
+      if (isPages) console.log("[LAB] api-config.json status:", r.status, r.statusText);
+      return r.ok ? r.json() : null;
+    })
     .then((j) => {
       if (j && typeof j.apiBaseUrl === "string" && j.apiBaseUrl) {
         runtimeApiBaseUrl = j.apiBaseUrl.replace(/\/$/, "");
+        if (isPages) console.log("[LAB] Using API from config:", runtimeApiBaseUrl);
         window.dispatchEvent(new Event("api-config-loaded"));
+      } else if (isPages) {
+        console.warn("[LAB] api-config.json missing or empty apiBaseUrl, using build-time URL");
       }
     })
-    .catch(() => {});
+    .catch((err) => {
+      if (isPages) console.warn("[LAB] api-config.json fetch failed:", err?.message || err);
+    });
 }
 
 // Start loading runtime config when in browser (no await — app can use build-time default until it loads)
