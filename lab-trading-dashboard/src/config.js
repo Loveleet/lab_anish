@@ -34,7 +34,11 @@ function getApiBaseUrl() {
 /** Load API URL from api-config.json (used on GitHub Pages so data works after cloud restart). */
 function loadRuntimeApiConfig() {
   if (typeof window === "undefined") return Promise.resolve();
-  const url = new URL("api-config.json", window.location.href).href;
+  // Use app base path (e.g. /lab_anish/) so fetch works on GitHub Pages
+  const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
+  const basePath = base === "./" || base === "." ? "" : base.replace(/\/$/, "");
+  const path = basePath + "/api-config.json";
+  const url = new URL(path, window.location.origin).href;
   return fetch(url, { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => {

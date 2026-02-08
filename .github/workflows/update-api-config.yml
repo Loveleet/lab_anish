@@ -17,22 +17,28 @@ jobs:
       - name: Get tunnel URL from cloud
         id: get_url
         run: |
-          URL=$(curl -sf "http://150.241.244.130:10000/api/tunnel-url" 2>/dev/null | tr -d '\n' || echo "")
+          URL=$(curl -sf "http://150.241.244.130:10000/api/tunnel-url" 2>/dev/null | tr -d '\n\r' || echo "")
+          if [ -z "$URL" ]; then
+            echo "::warning::Could not reach cloud /api/tunnel-url — skipping update"
+          fi
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Checkout gh-pages
+        if: steps.get_url.outputs.url != ''
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Write api-config.json
+        if: steps.get_url.outputs.url != ''
         env:
           API_URL: ${{ steps.get_url.outputs.url }}
         run: |
           node -e "console.log(JSON.stringify({apiBaseUrl: process.env.API_URL || ''}))" > api-config.json
 
       - name: Commit and push
+        if: steps.get_url.outputs.url != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
