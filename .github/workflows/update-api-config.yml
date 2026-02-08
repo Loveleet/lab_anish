@@ -4,7 +4,7 @@ name: Update API config (gh-pages)
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/2 * * * *'
   workflow_dispatch:
     inputs:
       api_url:
