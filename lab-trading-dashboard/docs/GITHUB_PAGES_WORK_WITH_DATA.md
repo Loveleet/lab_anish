@@ -10,9 +10,9 @@ To have **https://loveleet.github.io/lab_anish/** show real data (not just the U
 
 1. **Create a token:** https://github.com/settings/tokens → Generate new token (classic) → check **repo** (or fine-grained: Actions secrets read/write for Loveleet/lab_anish).
 
-2. **Set it on the cloud** (replace `ghp_YourTokenHere` with your token):
+2. **Set it on the cloud** (replace `ghp_YourTokenHere` with your token). Use `#` as delimiter so the token does not break sed:
    ```bash
-   ssh root@150.241.244.130 "sudo sed -i 's/^GH_TOKEN=.*/GH_TOKEN=ghp_YourTokenHere/' /etc/lab-trading-dashboard.env"
+   ssh root@150.241.244.130 'sudo sed -i "s#^GH_TOKEN=.*#GH_TOKEN=ghp_YourTokenHere#" /etc/lab-trading-dashboard.env'
    ```
    Or on the cloud: `sudo nano /etc/lab-trading-dashboard.env` and set `GH_TOKEN=ghp_xxxx`.
 

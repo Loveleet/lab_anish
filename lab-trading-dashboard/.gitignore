@@ -11,6 +11,7 @@ dist/
 .env.*
 !.env.example
 !.env.deploy.example
+!.env.development.example
 
 # Server with credentials — only on cloud; repo has server.example.js
 server/server.js

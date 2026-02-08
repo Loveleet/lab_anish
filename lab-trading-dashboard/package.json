@@ -8,7 +8,8 @@
     "shadow": "vite --mode shadow",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "use-cloud-api": "bash scripts/use-cloud-api.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

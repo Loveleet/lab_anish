@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run on the CLOUD. Reads the tunnel URL from the log and updates GitHub secret API_BASE_URL
-# so GitHub Pages builds use the correct HTTPS API URL. No laptop needed.
+# Run on the CLOUD. Reads the tunnel URL from the log, updates GitHub secret API_BASE_URL,
+# and triggers "Deploy frontend to GitHub Pages" so the site keeps working after reboot. No laptop needed.
 #
 # Requires: GH_TOKEN in /etc/lab-trading-dashboard.env (create at https://github.com/settings/tokens, repo scope)
-# Optional: GITHUB_REPO (default: Loveleet/lab_anish)
+# Optional: GITHUB_REPO (default: Loveleet/lab_anish), GITHUB_DEPLOY_BRANCH (default: lab_live)
 
 set -e
 [ -f /etc/lab-trading-dashboard.env ] && set -a && . /etc/lab-trading-dashboard.env && set +a
@@ -22,11 +22,16 @@ if [ -z "$URL" ]; then
 fi
 echo "$URL" > /var/run/lab-tunnel-url 2>/dev/null || true
 echo "Tunnel URL: $URL"
-# Update GitHub secret if token is set
+# Update GitHub secret and trigger frontend deploy (fully auto after reboot)
 TOKEN="${GH_TOKEN:-$GITHUB_TOKEN}"
+DEPLOY_BRANCH="${GITHUB_DEPLOY_BRANCH:-lab_live}"
 if [ -n "$TOKEN" ]; then
   if command -v gh &>/dev/null; then
-    GH_TOKEN="$TOKEN" gh secret set API_BASE_URL --body "$URL" --repo "$REPO" && echo "Updated GitHub secret API_BASE_URL"
+    if GH_TOKEN="$TOKEN" gh secret set API_BASE_URL --body "$URL" --repo "$REPO"; then
+      echo "Updated GitHub secret API_BASE_URL"
+      # Trigger frontend deploy so the new build uses the new URL (no laptop needed)
+      GH_TOKEN="$TOKEN" gh workflow run "Deploy frontend to GitHub Pages" --ref "$DEPLOY_BRANCH" --repo "$REPO" && echo "Triggered Deploy frontend to GitHub Pages on $DEPLOY_BRANCH"
+    fi
   else
     echo "Install gh CLI to auto-update GitHub secret: apt install gh"
   fi
