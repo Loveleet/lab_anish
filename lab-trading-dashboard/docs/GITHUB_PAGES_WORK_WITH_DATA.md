@@ -44,6 +44,8 @@ cloudflared tunnel --url http://localhost:10000
 
 ## Step 2: Set the URL in GitHub
 
+**Or get current URL from the cloud:** http://150.241.244.130:10000/api/tunnel-url
+
 1. Open **https://github.com/Loveleet/lab_anish** → **Settings** → **Secrets and variables** → **Actions**.
 2. Click **New repository secret** (or edit existing).
 3. **Name:** `API_BASE_URL`
