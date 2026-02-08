@@ -45,7 +45,7 @@ jobs:
         env:
           API_URL: ${{ secrets.API_BASE_URL || 'https://150.241.244.130:10000' }}
         run: |
-          cd lab-trading-dashboard/dist && node -e "console.log(JSON.stringify({apiBaseUrl: process.env.API_URL || ''}))" > api-config.json
+          node -e "console.log(JSON.stringify({apiBaseUrl: process.env.API_URL || ''}))" > dist/api-config.json
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
