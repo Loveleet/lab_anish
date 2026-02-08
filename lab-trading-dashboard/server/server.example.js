@@ -55,12 +55,16 @@ const PORT = process.env.PORT || 10000;
 const ENABLE_SELF_PING = String(process.env.ENABLE_SELF_PING || '').toLowerCase() === 'true';
 const VERBOSE_LOG = String(process.env.VERBOSE_LOG || '').toLowerCase() === 'true';
 
-// ✅ Allowed Frontend Origins (local dev + cloud server)
+// ✅ Allowed Frontend Origins (local + cloud + GitHub Pages / Vercel when frontend is hosted there)
+const extraOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:10000",
-  "http://150.241.244.130:10000", // Cloud server (this app)
+  "http://150.241.244.130:10000", // Cloud (when frontend is served from same server)
+  "https://loveleet.github.io",   // GitHub Pages (frontend hosted by GitHub)
+  "https://lab-anish.vercel.app",
+  ...extraOrigins,
 ];
 
 // ✅ Proper CORS Handling
@@ -202,6 +206,18 @@ async function fetchFromFallback(path, queryString = "") {
 // ✅ Health Check (for monitoring)
 app.get("/api/health", (req, res) => {
   res.send("✅ Backend is working!");
+});
+
+// Return current Cloudflare tunnel URL (for GitHub Pages). Written by update-github-secret-from-tunnel.sh on cloud.
+app.get("/api/tunnel-url", (req, res) => {
+  try {
+    const f = path.join("/var/run", "lab-tunnel-url");
+    if (fs.existsSync(f)) {
+      const url = fs.readFileSync(f, "utf8").trim();
+      return res.json({ tunnelUrl: url });
+    }
+  } catch (e) { /* ignore */ }
+  res.json({ tunnelUrl: null });
 });
 
 // ✅ Debug: table row counts + DB source (no secrets) — explains why cloud shows fewer trades

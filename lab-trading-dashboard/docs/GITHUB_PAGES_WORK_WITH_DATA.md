@@ -4,9 +4,18 @@ To have **https://loveleet.github.io/lab_anish/** show real data (not just the U
 
 ---
 
-## Step 1: Expose the API over HTTPS (on the cloud server)
+## Step 1: Expose the API over HTTPS
 
-**SSH into your cloud server** (150.241.244.130), then run:
+**Option 1 – From your laptop (one command):**
+
+```bash
+cd lab-trading-dashboard
+./scripts/run-tunnel-from-laptop.sh
+```
+
+If the cloud has a broken `dpkg`, fix it first: `ssh root@150.241.244.130 "sudo dpkg --configure -a"`, then run the script again. The script will print the URL to add to GitHub.
+
+**Option 2 – On the cloud server (SSH in first):**
 
 ```bash
 # From your laptop (optional): copy the script to the cloud and run it
