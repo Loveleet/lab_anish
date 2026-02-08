@@ -8,11 +8,6 @@ on:
   push:
     branches: [main, lab_live]
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to build and deploy'
-        required: true
-        default: 'lab_live'
 
 permissions:
   contents: read
