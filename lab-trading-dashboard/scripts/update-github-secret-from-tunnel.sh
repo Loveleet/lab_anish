@@ -36,8 +36,8 @@ if [ -n "$TOKEN" ]; then
     else
       log "Warning: could not update GitHub secret (check GH_TOKEN and repo access)"
     fi
-    if GH_TOKEN="$TOKEN" gh workflow run "Update API config (gh-pages)" --repo "$REPO" 2>/dev/null; then
-      log "Triggered Update API config (gh-pages) — site will use new URL in ~1 min after workflow runs"
+    if GH_TOKEN="$TOKEN" gh workflow run "Update API config (gh-pages)" --repo "$REPO" -f "api_url=$URL" 2>/dev/null; then
+      log "Triggered Update API config (gh-pages) with URL — site will use new URL in ~1 min"
     else
       log "Warning: could not trigger workflow (check GH_TOKEN has workflow scope)"
     fi

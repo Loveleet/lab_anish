@@ -1,11 +1,16 @@
 # Update api-config.json on gh-pages so the live site gets the current tunnel URL after cloud reboot.
-# Runs every 15 min and on manual trigger. Frontend loads this file at runtime so data shows without redeploy.
+# Trigger from cloud with: gh workflow run "Update API config (gh-pages)" -f api_url="https://xxx.trycloudflare.com"
 name: Update API config (gh-pages)
 
 on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Tunnel URL (optional; if set, used instead of curling cloud)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -14,14 +19,22 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - name: Get tunnel URL from cloud
+      - name: Resolve tunnel URL
         id: get_url
+        env:
+          INPUT_URL: ${{ github.event.inputs.api_url }}
         run: |
-          URL=$(curl -sf "http://150.241.244.130:10000/api/tunnel-url" 2>/dev/null | tr -d '\n\r' || echo "")
-          if [ -z "$URL" ]; then
-            echo "::warning::Could not reach cloud /api/tunnel-url — skipping update"
+          if [ -n "$INPUT_URL" ]; then
+            echo "url=$INPUT_URL" >> $GITHUB_OUTPUT
+            echo "Using URL from workflow input"
+          else
+            RAW=$(curl -sf "http://150.241.244.130:10000/api/tunnel-url" 2>/dev/null || echo "")
+            URL=$(echo "$RAW" | node -e "const d=require('fs').readFileSync(0,'utf8').trim(); try { console.log(JSON.parse(d).tunnelUrl||d); } catch(e) { console.log(d); }" 2>/dev/null || echo "$RAW" | tr -d '\n\r')
+            if [ -z "$URL" ]; then
+              echo "::warning::Could not reach cloud and no input URL — skipping update"
+            fi
+            echo "url=$URL" >> $GITHUB_OUTPUT
           fi
-          echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Checkout gh-pages
         if: steps.get_url.outputs.url != ''
