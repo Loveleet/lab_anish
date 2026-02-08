@@ -1,135 +1,101 @@
-# Step-by-step: Auto-sync with GitHub + App runs on boot
+# Auto-sync: Push to GitHub → Deploy to Cloud
 
-Two things:
+Once set up, **every push to your configured branch** (e.g. `main` or `lab_live`) will automatically deploy to your cloud server (150.241.244.130). No need to run `upload-dist.sh` manually.
 
-1. **App runs all the time** — starts when the server boots, restarts if it crashes.
-2. **Push to GitHub → cloud updates** — push to `main` and the cloud pulls and restarts automatically.
-
----
-
-## Part 1: Make the app run on boot and survive crashes
-
-The app is managed by **systemd**. You only need to ensure the service is installed and **enabled**.
-
-### Option A — From your laptop (one command)
-
-From the repo root, with `.env` containing `DEPLOY_HOST` and `DEPLOY_PASSWORD`:
-
-```bash
-./scripts/run-ensure-on-boot-on-cloud.sh
-```
-
-This SSHs to the cloud and installs/enables the systemd service so that:
-
-- The app **starts when the server boots**.
-- If the app **crashes**, systemd **restarts it** after 10 seconds.
-
-### Option B — On the cloud (after SSH in)
-
-```bash
-ssh root@150.241.244.130
-cd /opt/apps/lab-trading-dashboard
-sudo bash scripts/ensure-app-runs-on-boot.sh
-```
-
-### Verify
-
-- **Status:** `sudo systemctl status lab-trading-dashboard`
-- **Logs:** `journalctl -u lab-trading-dashboard -f`
-- **Reboot test:** Reboot the server; after it comes back, open `http://150.241.244.130:10000` — the dashboard should load.
+**Using a different branch:** Edit the workflow files and change the `branches` list. In `.github/workflows/deploy.yml` and `.github/workflows/deploy-frontend-pages.yml`, set e.g. `branches: [main, lab_live]` or only `branches: [lab_live]` so pushes to that branch trigger the deploy.
 
 ---
 
-## Part 2: Auto-sync with GitHub (push → cloud deploys)
+## Step 1: Create an SSH key for GitHub Actions (one-time)
 
-When you **push to the `main` branch**, GitHub Actions SSHs to your cloud and runs `deploy.sh` (pull, build, restart). No need to run `upload-dist.sh` manually.
-
-### Step 1: Create an SSH key for GitHub Actions (on your laptop, one-time)
+On your **laptop**, open a terminal and run:
 
 ```bash
+# Create a key (no passphrase so GitHub can use it non-interactively)
 ssh-keygen -t ed25519 -f ~/.ssh/lab_deploy_key -N "" -C "github-actions-deploy"
 ```
 
-- **Private key** → you’ll put this in GitHub Secrets.
-- **Public key** → you’ll put this on the cloud so GitHub can SSH in.
+This creates:
 
-### Step 2: Add the public key to the cloud server
+- **Private key:** `~/.ssh/lab_deploy_key` → you will put this in GitHub Secrets.
+- **Public key:** `~/.ssh/lab_deploy_key.pub` → you will add this to the cloud server.
 
-```bash
-# From your laptop (use your .env DEPLOY_HOST and DEPLOY_PASSWORD)
-ssh-copy-id -i ~/.ssh/lab_deploy_key.pub root@150.241.244.130
-```
+---
 
-If you use password auth:
+## Step 2: Add the public key to the cloud server
 
-```bash
-# If you have sshpass and DEPLOY_PASSWORD in .env:
-cd /path/to/lab-trading-dashboard && . .env
-sshpass -e ssh-copy-id -i ~/.ssh/lab_deploy_key.pub -o StrictHostKeyChecking=no root@150.241.244.130
-```
-
-Test SSH with the key (no password):
+The cloud server must allow GitHub to SSH in using that key. From your **laptop** (in the repo root, with `.env` containing `DEPLOY_HOST` and `DEPLOY_PASSWORD`):
 
 ```bash
-ssh -i ~/.ssh/lab_deploy_key root@150.241.244.130 "echo OK"
+# From repo root, load .env
+cd /path/to/lab-trading-dashboard
+set -a && source .env && set +a
+
+# Append the public key to root's authorized_keys on the cloud
+SSHPASS="$DEPLOY_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no "$DEPLOY_HOST" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$(cat ~/.ssh/lab_deploy_key.pub)' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo 'Key added.'"
 ```
 
-You should see `OK` without being asked for a password.
+If you prefer to do it manually: SSH into the cloud as root, then run:
 
-### Step 3: Add GitHub Secrets
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+# Paste the contents of ~/.ssh/lab_deploy_key.pub (from your laptop) into:
+nano ~/.ssh/authorized_keys
+# Save, then:
+chmod 600 ~/.ssh/authorized_keys
+```
+
+---
+
+## Step 3: Add GitHub Secrets
 
 1. Open your repo on GitHub → **Settings** → **Secrets and variables** → **Actions**.
-2. **New repository secret** for each:
+2. Click **New repository secret** and add these:
 
-| Name        | Value                          |
-|-------------|--------------------------------|
-| `SSH_HOST`  | `150.241.244.130`              |
-| `SSH_USER`  | `root`                         |
-| `SSH_KEY`   | Paste the **private** key: `cat ~/.ssh/lab_deploy_key` (entire output) |
-| `SSH_PORT`  | (optional) `22`                |
-| `APP_PATH`  | (optional) Only if your app is **not** at `/opt/apps/<repo-name>`. Use `/opt/apps/lab-trading-dashboard` if you cloned with that folder name. |
+| Name         | Value                     | Required |
+|--------------|---------------------------|----------|
+| `SSH_HOST`   | `150.241.244.130`          | Yes      |
+| `SSH_USER`   | `root`                    | Yes      |
+| `SSH_KEY`    | Contents of `~/.ssh/lab_deploy_key` (whole file, including `-----BEGIN ... KEY-----` and `-----END ... KEY-----`) | Yes |
+| `SSH_PORT`   | `22`                      | No (default 22) |
+| `SSH_APP_PATH` | `lab-trading-dashboard`  | No (default; use only if your app is in a different folder on the server) |
 
-If your GitHub repo name is `lab_anish`, the workflow will use `/opt/apps/lab_anish` by default. If you actually cloned the repo as `lab-trading-dashboard` on the server, add secret **`APP_PATH`** = **`/opt/apps/lab-trading-dashboard`**.
-
-### Step 4: Ensure the app path on the cloud matches
-
-The workflow will run:
-
-- `cd $APP_PATH`
-- `./deploy.sh` (or equivalent: git pull, npm ci, build, copy server.example.js → server.js, restart)
-
-So on the cloud you must have the repo at the path you set (or the default `/opt/apps/<repo-name>`). For example:
-
-- Repo name on GitHub: **lab_anish** → path must be **/opt/apps/lab_anish** (or set secret **APP_PATH** = **/opt/apps/lab-trading-dashboard** if that’s where you put it).
-- Repo name on GitHub: **lab-trading-dashboard** → path must be **/opt/apps/lab-trading-dashboard**.
-
-If you only ever used `upload-dist.sh` and never cloned the repo on the server, clone it once:
+To copy the private key to the clipboard (macOS):
 
 ```bash
-ssh root@150.241.244.130
-sudo mkdir -p /opt/apps
-git clone https://github.com/Loveleet/lab_anish.git /opt/apps/lab_anish
-# Or, if you want path lab-trading-dashboard:
-# git clone https://github.com/Loveleet/lab_anish.git /opt/apps/lab-trading-dashboard
+cat ~/.ssh/lab_deploy_key | pbcopy
 ```
 
-Then run Part 1 (ensure-app-runs-on-boot) so systemd uses the correct path, and set **APP_PATH** if you used `lab-trading-dashboard`.
+Then paste into the `SSH_KEY` secret value.
 
-### Step 5: Trigger a deploy
+---
 
-- **Push to `main`** — workflow runs automatically.
-- Or: **Actions** tab → **Deploy to Ubuntu** → **Run workflow**.
+## Step 4: Push to `main` and verify
 
-Check the **Actions** tab for success or errors.
+1. Commit and push to the `main` branch:
+
+   ```bash
+   git add .
+   git commit -m "Enable GitHub auto-deploy"
+   git push origin main
+   ```
+
+2. On GitHub, open the **Actions** tab. You should see the **Deploy to Ubuntu** workflow run. Click it to see the log.
+
+3. If it succeeds, your cloud app at http://150.241.244.130:10000 will be running the latest code. If it fails, check:
+   - **"Error: /opt/apps/lab-trading-dashboard not found"** → Run the one-time server setup first (`scripts/setup-server-once.sh` or `docs/DEPLOY_DASHBOARD_UBUNTU.md`).
+   - **Permission denied (publickey)** → Step 2: the public key is not in `root@150.241.244.130`’s `~/.ssh/authorized_keys`.
+   - **Secrets not set** → Step 3: ensure `SSH_HOST`, `SSH_USER`, and `SSH_KEY` are set.
 
 ---
 
 ## Summary
 
-| Goal                         | What to do |
-|-----------------------------|------------|
-| App starts on server reboot | Run `./scripts/run-ensure-on-boot-on-cloud.sh` once (or run `ensure-app-runs-on-boot.sh` on the server). |
-| App restarts when it crashes| Same — systemd has `Restart=always`. |
-| Push to GitHub → cloud updates | Add SSH key to cloud, add secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY` (and `APP_PATH` if path differs). Push to `main`. |
+| You do                         | What happens                                      |
+|--------------------------------|---------------------------------------------------|
+| Push to `main`                 | GitHub Actions runs and SSHs to your cloud        |
+| On the cloud                   | `git pull`, `npm ci`, `npm run build`, copy `server.example.js` → `server.js`, restart service |
+| Result                         | http://150.241.244.130:10000 serves the latest code |
 
-After this, you only need to **push to `main`**; the cloud will stay in sync and the app will keep running across reboots and crashes.
+Secrets (DB, FALLBACK_API_URL, etc.) stay only in `/etc/lab-trading-dashboard.env` on the cloud; they are never in GitHub. Each deploy only updates code and restarts the app.
