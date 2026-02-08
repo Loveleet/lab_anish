@@ -4,23 +4,39 @@ To have **https://loveleet.github.io/lab_anish/** show real data (not just the U
 
 ---
 
-## Auto-update GitHub secret when tunnel restarts
+## Zero maintenance (nothing to do on cloud reboot)
 
-**Already on the cloud:** `gh` is installed; `GH_TOKEN=` is in `/etc/lab-trading-dashboard.env`. To enable auto-update:
+Use a **fixed API URL** so the frontend never needs updating when the cloud or tunnel restarts.
 
-1. **Create a token:** https://github.com/settings/tokens → Generate new token (classic) → check **repo** (or fine-grained: Actions secrets read/write for Loveleet/lab_anish).
+1. **Get a stable hostname** – Use a **Cloudflare named tunnel** with a hostname (e.g. a subdomain you add in Cloudflare). The URL stays the same after every reboot.
+   - In [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) (or [dash.cloudflare.com](https://dash.cloudflare.com)): add your domain, then **Networks → Tunnels → Create a tunnel**.
+   - Create a tunnel (e.g. "lab-api"), install `cloudflared` on the cloud, and **route** a hostname (e.g. `api.yourdomain.com`) to `http://localhost:10000`.
+   - Your fixed URL is then `https://api.yourdomain.com` (or whatever hostname you chose).
 
-2. **Set it on the cloud** (replace `ghp_YourTokenHere` with your token). Use `#` as delimiter so the token does not break sed:
-   ```bash
-   ssh root@150.241.244.130 'sudo sed -i "s#^GH_TOKEN=.*#GH_TOKEN=ghp_YourTokenHere#" /etc/lab-trading-dashboard.env'
-   ```
-   Or on the cloud: `sudo nano /etc/lab-trading-dashboard.env` and set `GH_TOKEN=ghp_xxxx`.
+2. **Set it once in GitHub** – **Settings → Secrets and variables → Actions** → set **API_BASE_URL** = `https://api.yourdomain.com` (no trailing slash).
 
-3. **Test:** Restart tunnel and run the script; you should see "Updated GitHub secret API_BASE_URL". Then run **Actions → Deploy frontend to GitHub Pages** once.
+3. **Deploy the frontend once** – **Actions → Deploy frontend to GitHub Pages** (or push to `lab_live`).
+
+After that, **cloud reboots don't require any action** – the same URL keeps working.
 
 ---
 
-## Step 1: Expose the API over HTTPS
+## Runtime API URL (quick tunnel + auto-update)
+
+If you use the **quick tunnel** (URL changes on reboot), the app **loads the API URL at runtime** from `api-config.json`:
+
+1. **Deploy** – Run "Deploy frontend to GitHub Pages" (or push to `lab_live`). The build writes `api-config.json` with your current `API_BASE_URL` secret.
+2. **Crontab on the cloud** – So the new URL is pushed to GitHub after every reboot without copy/paste:
+   - Copy scripts to the cloud, then on the cloud run:  
+     `sudo /opt/apps/lab-trading-dashboard/scripts/install-cron-tunnel-update.sh`  
+   - This adds: **@reboot** (run 90s after boot) and **every 10 min** to run the update script (updates GitHub secret and triggers "Update API config (gh-pages)").
+3. **GitHub workflow** – "Update API config (gh-pages)" also runs every 15 min as a backup. After a reboot, crontab runs first (~90s), then the site gets the new URL in ~1 min.
+
+**Local (localhost)** – Unchanged: `npm run dev` uses the cloud IP or `.env.local`; no `api-config.json` needed.
+
+---
+
+## Step 1: Expose the API over HTTPS (quick tunnel)
 
 **Option 1 – From your laptop (one command):**
 

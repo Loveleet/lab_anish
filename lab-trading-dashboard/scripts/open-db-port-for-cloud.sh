@@ -22,12 +22,12 @@ fi
 HBA=$(find /etc/postgresql -name pg_hba.conf 2>/dev/null | head -1)
 if [ -n "$HBA" ]; then
   if ! grep -q "$CLOUD_IP" "$HBA"; then
-    echo "host  labdb2  postgres  ${CLOUD_IP}/32  scram-sha-256" | sudo tee -a "$HBA"
+    echo "host  olab  postgres  ${CLOUD_IP}/32  scram-sha-256" | sudo tee -a "$HBA"
     echo "  Added $CLOUD_IP to $HBA"
   fi
   sudo systemctl reload postgresql 2>/dev/null || sudo service postgresql reload 2>/dev/null || true
 else
-  echo "  (pg_hba.conf not found; add line: host labdb2 postgres ${CLOUD_IP}/32 scram-sha-256)"
+  echo "  (pg_hba.conf not found; add line: host olab postgres ${CLOUD_IP}/32 scram-sha-256)"
 fi
 
 # 3) Firewall: allow 5432 from cloud (Ubuntu ufw / or iptables)

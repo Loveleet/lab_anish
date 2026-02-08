@@ -23,7 +23,7 @@ The app is designed to run **only on your cloud server**. The Node.js server (se
    Example:
    ```bash
    PORT=10000
-   DATABASE_URL=postgres://user:password@your-db-host:5432/labdb2
+   DATABASE_URL=postgres://user:password@your-db-host:5432/olab
    ```
    Or use `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` if you prefer.
 3. Setup script copies `server.example.js` → `server.js` and starts the systemd service. After that, every deploy refreshes `server.js` from the template so the server always runs the code from Git; secrets stay in the env file.

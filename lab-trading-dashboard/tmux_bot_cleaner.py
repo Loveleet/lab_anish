@@ -215,20 +215,27 @@ def get_utc_ist():
     ist_now = utc_now + timedelta(hours=5, minutes=30)
     return utc_now.strftime('%Y-%m-%d %H:%M:%S'), ist_now.strftime('%Y-%m-%d %H:%M:%S')
 
+def _open_log(mode, **kwargs):
+    """Open LOG_FILE with UTF-8 and replace invalid bytes so log never crashes the script."""
+    return open(LOG_FILE, mode, encoding='utf-8', errors='replace', **kwargs)
+
 def log_event(message):
     utc_time, ist_time = get_utc_ist()
     line = f"[UTC: {utc_time} | IST: {ist_time}] {message}"
     if os.isatty(1):
         print(line)
-    with open(LOG_FILE, 'a') as f:
+    with _open_log('a') as f:
         f.write(line + '\n')
     trim_old_logs()
 
 def trim_old_logs():
     if not os.path.exists(LOG_FILE):
         return
-    with open(LOG_FILE, 'r') as f:
-        lines = f.readlines()
+    try:
+        with _open_log('r') as f:
+            lines = f.readlines()
+    except OSError:
+        return
     new_lines = []
     for line in lines:
         try:
@@ -241,10 +248,13 @@ def trim_old_logs():
                 current_time = datetime.utcnow()
             if current_time - log_time <= timedelta(days=7):
                 new_lines.append(line)
-        except:
+        except Exception:
             new_lines.append(line)
-    with open(LOG_FILE, 'w') as f:
-        f.writelines(new_lines)
+    try:
+        with _open_log('w') as f:
+            f.writelines(new_lines)
+    except OSError:
+        pass
 
 # ---------------- Utilities ----------------
 def read_file_list(path):

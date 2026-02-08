@@ -9,7 +9,8 @@ Type=simple
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/lab_code
-ExecStart=/usr/bin/python3 /home/ubuntu/lab_code/tmux_bot_cleaner_postgrey.py
+# Runs tmux_bot_cleaner.py (repo name); copy/symlink to tmux_bot_cleaner_postgrey.py on deploy if you prefer that name
+ExecStart=/bin/bash -c 'cd /home/ubuntu/lab_code && exec /usr/bin/python3 tmux_bot_cleaner_postgrey.py 2>/dev/null || exec /usr/bin/python3 tmux_bot_cleaner.py'
 Restart=always
 RestartSec=15
 StartLimitBurst=5

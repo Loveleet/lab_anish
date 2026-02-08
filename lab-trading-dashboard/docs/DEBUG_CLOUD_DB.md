@@ -19,7 +19,7 @@
 - `DB_HOST=localhost`
 - `DB_PORT=5432`
 - `DB_USER=postgres`
-- `DB_NAME=labdb2`
+- `DB_NAME=olab`
 
 So the server is configured to use **PostgreSQL on the same machine (localhost)**, not a remote DB.
 
@@ -41,7 +41,7 @@ So the server **is** connecting to a database and reading from it.
 
 **Result:** On the cloud, direct query: `SELECT count(*) FROM alltraderecords` → **2 rows**.
 
-So the database the app is using (localhost `labdb2`) **only has 2 rows** in `alltraderecords`. That is why you see “demo” data: the app is showing everything that is in that DB.
+So the database the app is using (localhost `olab`) **only has 2 rows** in `alltraderecords`. That is why you see “demo” data: the app is showing everything that is in that DB.
 
 ---
 
@@ -85,8 +85,8 @@ So: the cloud **is** running server.js and **is** reaching **a** database; that 
 
 **Option B – Copy the full DB into the cloud’s local Postgres**
 
-1. From your laptop (or a host that can reach 150.241.245.36 and the cloud), run a dump from 150.241.245.36 and restore into the cloud’s local `labdb2` (e.g. using `scripts/dump-and-restore-to-cloud.sh` or similar).
+1. From your laptop (or a host that can reach 150.241.245.36 and the cloud), run a dump from 150.241.245.36 and restore into the cloud’s local `olab` (e.g. using `scripts/dump-and-restore-to-cloud.sh` or similar).
 2. Restart the app on the cloud.  
-   Then the app keeps using `DB_HOST=localhost` but the local `labdb2` will have the full data.
+   Then the app keeps using `DB_HOST=localhost` but the local `olab` will have the full data.
 
 Nothing in this flow uses Render; the app runs only on the cloud and talks only to the DB you configure.

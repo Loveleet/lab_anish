@@ -23,7 +23,7 @@ import RefreshControls from './components/RefreshControls';
 import SuperTrendPanel from "./SuperTrendPanel";
 import TradeComparePage from "./components/TradeComparePage";
 import SoundSettings from "./components/SoundSettings";
-import { API_BASE_URL, api } from "./config";
+import { getApiBaseUrl, api } from "./config";
 
 // Animated SVG background for LAB title
 function AnimatedGraphBackground({ width = 400, height = 80, opacity = 0.4 }) {
@@ -342,7 +342,7 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       const trades = Array.isArray(tradeJson.trades) ? tradeJson.trades : [];
       setDemoDataHint(tradeJson._meta?.demoData ? tradeJson._meta.hint || null : null);
 
-      const machinesRes = await fetch(`${API_BASE_URL}/api/machines`);
+      const machinesRes = await fetch(`${getApiBaseUrl()}/api/machines`);
       const machinesJson = machinesRes.ok ? await machinesRes.json() : { machines: [] };
       const machinesList = Array.isArray(machinesJson.machines) ? machinesJson.machines : [];
 
@@ -351,18 +351,18 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
       const logs = Array.isArray(logJson.logs) ? logJson.logs : [];
 
       // Fetch SuperTrend data
-      const superTrendRes = await fetch(`${API_BASE_URL}/api/supertrend`);
+      const superTrendRes = await fetch(`${getApiBaseUrl()}/api/supertrend`);
       const superTrendJson = superTrendRes.ok ? await superTrendRes.json() : { supertrend: [] };
       setSuperTrendData(Array.isArray(superTrendJson.supertrend) ? superTrendJson.supertrend : []);
 
       // Fetch EMA trend data
-      const emaRes = await fetch(`${API_BASE_URL}/api/pairstatus`);
+      const emaRes = await fetch(`${getApiBaseUrl()}/api/pairstatus`);
       const emaJson = emaRes.ok ? await emaRes.json() : null;
       setEmaTrends(emaJson);
 
       // Fetch BUY/SELL live flags
       try {
-        const flagsRes = await fetch(`${API_BASE_URL}/api/active-loss`);
+        const flagsRes = await fetch(`${getApiBaseUrl()}/api/active-loss`);
         const flagsJson = flagsRes.ok ? await flagsRes.json() : null;
         setActiveLossFlags(flagsJson || null);
       } catch {
@@ -411,6 +411,13 @@ const [selectedIntervals, setSelectedIntervals] = useState(() => {
 
   useEffect(() => {
     refreshAllData();
+  }, [refreshAllData]);
+
+  // Refetch when runtime api-config.json loads (GitHub Pages after cloud reboot)
+  useEffect(() => {
+    const onConfigLoaded = () => refreshAllData();
+    window.addEventListener("api-config-loaded", onConfigLoaded);
+    return () => window.removeEventListener("api-config-loaded", onConfigLoaded);
   }, [refreshAllData]);
 
   // Debug: log machine coverage and trade counts (raw vs filtered)

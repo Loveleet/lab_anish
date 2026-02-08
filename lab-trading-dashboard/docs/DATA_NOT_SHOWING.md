@@ -15,7 +15,7 @@ The app also loads env from **/etc/lab-trading-dashboard.env** at startup, so ad
 | Where you open the app | Database the API uses | What you see |
 |------------------------|------------------------|--------------|
 | **lab-anish.vercel.app** or Render | Database A (full data, e.g. 927 trades) | 313 closed, 927 total, etc. |
-| **150.241.244.130:10000** (cloud) | Database B = local `labdb2` on cloud server | Only 2 trades (seed rows) |
+| **150.241.244.130:10000** (cloud) | Database B = local `olab` on cloud server | Only 2 trades (seed rows) |
 
 The frontend and backend code are the same. The cloud backend reads from local PostgreSQL on the cloud host; that DB has only 2 rows in `alltraderecords`. To see the same data as Render, either **point the cloud at Render’s database** (easiest) or copy/restore the DB — see below.
 
@@ -42,7 +42,7 @@ If the cloud server **cannot** reach Render’s database (e.g. Render only allow
 
 ## Cause (on the cloud)
 
-On the app server (150.241.244.130), the database `labdb2` has:
+On the app server (150.241.244.130), the database `olab` has:
 
 - **alltraderecords**: **2 rows** (seed only) → dashboard shows only 2 trades; full data is in the other DB (Vercel/Render source)
 - **machines**: 9 rows ✅
@@ -58,13 +58,13 @@ So the main “data” (trades) is missing because **alltraderecords is empty**.
    - Allow PostgreSQL from the app server: open **port 5432** for IP **150.241.244.130** (firewall / security group).
    - In `postgresql.conf`: `listen_addresses = '*'` (or include the app server).
    - In `pg_hba.conf`: add  
-     `host  labdb2  postgres  150.241.244.130/32  scram-sha-256`
+     `host  olab  postgres  150.241.244.130/32  scram-sha-256`
 
 2. From your laptop (repo root):
    ```bash
    ./scripts/copy-database-to-cloud.sh
    ```
-   This runs on the app server as root in `/opt`, dumps from 150.241.245.36, restores into local `labdb2`, and restarts the app.
+   This runs on the app server as root in `/opt`, dumps from 150.241.245.36, restores into local `olab`, and restarts the app.
 
 3. Refresh **http://150.241.244.130:10000** — trades should appear.
 
@@ -77,7 +77,7 @@ If you prefer the app to read from the DB server every time:
 2. On the **app server**, edit `/etc/lab-trading-dashboard.env`:
    ```bash
    DB_HOST=150.241.245.36
-   # keep: DB_PORT=5432, DB_USER=postgres, DB_PASSWORD=IndiaNepal1-, DB_NAME=labdb2
+   # keep: DB_PORT=5432, DB_USER=postgres, DB_PASSWORD=IndiaNepal1-, DB_NAME=olab
    ```
 
 3. Restart the app:
@@ -96,7 +96,7 @@ If the database with all the trades is reachable from your machine (e.g. Render�
    FULL_DB_HOST=your-postgres-host
    FULL_DB_USER=postgres
    FULL_DB_PASSWORD=yourpassword
-   FULL_DB_NAME=labdb2
+   FULL_DB_NAME=olab
    ```
 2. From repo root run:
    ```bash
@@ -112,16 +112,16 @@ If you cannot reach the full DB from your laptop (e.g. Render internal DB only):
 
 1. **Create a dump** from wherever you can run `pg_dump` (e.g. a Render shell or the DB server):
    ```bash
-   PGPASSWORD='YourPassword' pg_dump -h <HOST> -U postgres -d labdb2 -F c -f labdb2.dump
+   PGPASSWORD='YourPassword' pg_dump -h <HOST> -U postgres -d olab -F c -f olab.dump
    ```
-2. **Copy the dump to the cloud server**: `scp labdb2.dump root@150.241.244.130:/tmp/labdb2.dump`
+2. **Copy the dump to the cloud server**: `scp olab.dump root@150.241.244.130:/tmp/olab.dump`
 3. **Restore on the cloud**:
    ```bash
    scp scripts/restore-db-on-server.sh root@150.241.244.130:/tmp/
-   ssh root@150.241.244.130 'sudo bash /tmp/restore-db-on-server.sh /tmp/labdb2.dump'
+   ssh root@150.241.244.130 'sudo bash /tmp/restore-db-on-server.sh /tmp/olab.dump'
    ```
 4. Refresh **http://150.241.244.130:10000**.
 
 ---
 
-Until the cloud server’s `labdb2` is filled with the full data (by copy script, opening 150.241.245.36:5432, or restoring a dump), the cloud dashboard will keep showing only the rows that exist in the cloud DB (e.g. 2 seed trades).
+Until the cloud server’s `olab` is filled with the full data (by copy script, opening 150.241.245.36:5432, or restoring a dump), the cloud dashboard will keep showing only the rows that exist in the cloud DB (e.g. 2 seed trades).

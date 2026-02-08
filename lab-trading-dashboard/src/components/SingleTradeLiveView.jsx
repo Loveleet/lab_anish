@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Play, Settings, Square, Shield, Crosshair, LayoutGrid } from "lucide-react";
 import { formatTradeData } from "./TableView";
 import { LogoutButton } from "../auth";
-import { API_BASE_URL } from "../config";
+import { getApiBaseUrl } from "../config";
 
 const REFRESH_INTERVAL_KEY = "refresh_app_main_intervalSec";
 
@@ -786,7 +786,7 @@ export default function SingleTradeLiveView({ formattedRow: initialFormattedRow,
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/trades`);
+        const res = await fetch(`${getApiBaseUrl()}/api/trades`);
         if (cancelled || !res.ok) return;
         const data = await res.json();
         if (cancelled || !Array.isArray(data)) return;

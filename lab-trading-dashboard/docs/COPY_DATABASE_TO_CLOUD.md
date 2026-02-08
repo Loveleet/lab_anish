@@ -15,16 +15,16 @@ To get the same data showing on the cloud, copy the database from the server tha
 
 ### Step 1: On the DB server (150.241.245.36)
 
-SSH in and create a dump of `labdb2`:
+SSH in and create a dump of `olab`:
 
 ```bash
 ssh root@150.241.245.36
 
 # Dump the database (use postgres user; password: IndiaNepal1-)
-PGPASSWORD='IndiaNepal1-' pg_dump -h localhost -U postgres -d labdb2 -F c -f /tmp/labdb2.dump
+PGPASSWORD='IndiaNepal1-' pg_dump -h localhost -U postgres -d olab -F c -f /tmp/olab.dump
 
 # Or if PostgreSQL is on another host on that machine:
-# PGPASSWORD='IndiaNepal1-' pg_dump -h 127.0.0.1 -U postgres -d labdb2 -F c -f /tmp/labdb2.dump
+# PGPASSWORD='IndiaNepal1-' pg_dump -h 127.0.0.1 -U postgres -d olab -F c -f /tmp/olab.dump
 ```
 
 ### Step 2: Copy the dump to the app server
@@ -32,8 +32,8 @@ PGPASSWORD='IndiaNepal1-' pg_dump -h localhost -U postgres -d labdb2 -F c -f /tm
 From your **laptop** (or from 150.241.245.36 if it can reach 150.241.244.130):
 
 ```bash
-scp root@150.241.245.36:/tmp/labdb2.dump /tmp/
-scp /tmp/labdb2.dump root@150.241.244.130:/tmp/
+scp root@150.241.245.36:/tmp/olab.dump /tmp/
+scp /tmp/olab.dump root@150.241.244.130:/tmp/
 ```
 
 ### Step 3: On the app server (150.241.244.130) – restore
@@ -41,13 +41,13 @@ scp /tmp/labdb2.dump root@150.241.244.130:/tmp/
 ```bash
 ssh root@150.241.244.130
 
-# Drop existing labdb2 and recreate (so restore is clean)
-sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'labdb2' AND pid <> pg_backend_pid();"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS labdb2;"
-sudo -u postgres psql -c "CREATE DATABASE labdb2 OWNER postgres;"
+# Drop existing olab and recreate (so restore is clean)
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'olab' AND pid <> pg_backend_pid();"
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS olab;"
+sudo -u postgres psql -c "CREATE DATABASE olab OWNER postgres;"
 
 # Restore the dump
-sudo -u postgres pg_restore -d labdb2 -F c /tmp/labdb2.dump
+sudo -u postgres pg_restore -d olab -F c /tmp/olab.dump
 
 # Restart the app
 sudo systemctl restart lab-trading-dashboard
@@ -64,10 +64,10 @@ If the app server can connect to the DB server (firewall allows 150.241.244.130 
 ```bash
 ssh root@150.241.244.130
 
-PGPASSWORD='IndiaNepal1-' pg_dump -h 150.241.245.36 -U postgres -d labdb2 -F c -f /tmp/labdb2.dump
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS labdb2;"
-sudo -u postgres psql -c "CREATE DATABASE labdb2 OWNER postgres;"
-sudo -u postgres pg_restore -d labdb2 -F c /tmp/labdb2.dump
+PGPASSWORD='IndiaNepal1-' pg_dump -h 150.241.245.36 -U postgres -d olab -F c -f /tmp/olab.dump
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS olab;"
+sudo -u postgres psql -c "CREATE DATABASE olab OWNER postgres;"
+sudo -u postgres pg_restore -d olab -F c /tmp/olab.dump
 sudo systemctl restart lab-trading-dashboard
 ```
 
@@ -82,6 +82,6 @@ Then point the app back at the remote DB by editing `/etc/lab-trading-dashboard.
 |------------------|--------------|
 | **Render**       | App connected to a DB that had tables + data. |
 | **Cloud now**    | App connected to local PostgreSQL; DB is empty. |
-| **Fix**          | Copy that DB (from 150.241.245.36 or from Render export) into the cloud server’s `labdb2`. |
+| **Fix**          | Copy that DB (from 150.241.245.36 or from Render export) into the cloud server’s `olab`. |
 
 The **server code** is the same; the only difference is **which database** it uses and **whether that database has data**.

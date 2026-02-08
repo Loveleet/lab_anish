@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# Enhanced Crontab Script with Auto-restart
-# Add this to crontab: @reboot /path/to/cron_bot_cleaner.sh
+# Enhanced Crontab Script with Auto-restart — FOR MAC/LAPTOP ONLY (paths are Mac-specific).
+# Add this to crontab on Mac: @reboot /path/to/cron_bot_cleaner.sh
+#
+# On the CLOUD use cron_bot_cleaner_cloud.sh instead — that one has Linux paths and
+# will find tmux_bot_cleaner.py or tmux_bot_cleaner_postgrey.py. Add to crontab on cloud:
+#   @reboot /home/ubuntu/lab_code/cron_bot_cleaner_cloud.sh
 
 SCRIPT_DIR="/Users/apple/Desktop/lab_code"
 SCRIPT_NAME="tmux_bot_cleaner_postgrey.py"

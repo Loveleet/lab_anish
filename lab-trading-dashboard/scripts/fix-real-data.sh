@@ -11,11 +11,11 @@ cd "$(dirname "$0")/.."
 DEPLOY_HOST="${DEPLOY_HOST:?}"
 DB_SERVER="${DB_SERVER:-root@150.241.245.36}"
 DB_SERVER_IP="150.241.245.36"
-# Same as Render (server copy.js): postgres / IndiaNepal1- / labdb2 / port 5432 / no SSL
+# Same as Render (server copy.js): postgres / IndiaNepal1- / olab / port 5432 / no SSL
 DB_USER="postgres"
 PG_PASS="IndiaNepal1-"
 DB_PORT="5432"
-DB_NAME="labdb2"
+DB_NAME="olab"
 
 echo "=============================================="
 echo "  Fix real data on cloud"
@@ -46,7 +46,7 @@ fi
 
 # Step 3: Point cloud at DB server with same credentials as Render (server copy.js)
 echo ""
-echo "→ Step 3: Point cloud at DB server (postgres / labdb2 / IndiaNepal1-)..."
+echo "→ Step 3: Point cloud at DB server (postgres / olab / IndiaNepal1-)..."
 SSHPASS="$DEPLOY_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no "$DEPLOY_HOST" "
   sudo sed -i 's/^DB_HOST=.*/DB_HOST=$DB_SERVER_IP/' /etc/lab-trading-dashboard.env
   sudo sed -i 's/^DB_USER=.*/DB_USER=$DB_USER/' /etc/lab-trading-dashboard.env

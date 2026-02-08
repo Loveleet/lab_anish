@@ -9,15 +9,15 @@ cd "$(dirname "$0")/.."
 [ -f .env ] && set -a && . ./.env && set +a
 
 DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST in .env}"
-# Same credentials as Render used (server copy.js): 150.241.245.36, postgres, IndiaNepal1-, labdb2, no SSL
+# Same credentials as Render used (server copy.js): 150.241.245.36, postgres, IndiaNepal1-, olab, no SSL
 DB_SERVER_IP="150.241.245.36"
 DB_USER="postgres"
 DB_PASS="IndiaNepal1-"
 DB_PORT="5432"
-DB_NAME="labdb2"
+DB_NAME="olab"
 
-echo "→ Pointing cloud at DB server $DB_SERVER_IP (postgres / labdb2, same as Render)..."
-# Ensure all five vars (server copy.js). Sed replaces if line exists; app defaults are postgres/5432/labdb2 anyway.
+echo "→ Pointing cloud at DB server $DB_SERVER_IP (postgres / olab, same as Render)..."
+# Ensure all five vars (server copy.js). Sed replaces if line exists; app defaults are postgres/5432/olab anyway.
 SSHPASS="$DEPLOY_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no "$DEPLOY_HOST" "
   sudo sed -i 's/^DB_HOST=.*/DB_HOST=$DB_SERVER_IP/' /etc/lab-trading-dashboard.env
   sudo sed -i 's/^DB_USER=.*/DB_USER=$DB_USER/' /etc/lab-trading-dashboard.env

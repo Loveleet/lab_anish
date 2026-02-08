@@ -2,7 +2,7 @@
 
 **Credentials (same as Render / server copy.js):**
 - **Cloud Ubuntu** (150.241.244.130) SSH: `DEPLOY_PASSWORD` in `.env` (e.g. 9988609709)
-- **DB server** (150.241.245.36) Postgres: `DB_USER=postgres`, `DB_PASSWORD=IndiaNepal1-`, `DB_NAME=labdb2`, `DB_PORT=5432`, no SSL. The scripts set these on the cloud when pointing at the DB server.
+- **DB server** (150.241.245.36) Postgres: `DB_USER=postgres`, `DB_PASSWORD=IndiaNepal1-`, `DB_NAME=olab`, `DB_PORT=5432`, no SSL. The scripts set these on the cloud when pointing at the DB server.
 
 ---
 
@@ -20,7 +20,7 @@ PG_CONF=$(find /etc/postgresql -name postgresql.conf 2>/dev/null | head -1)
 [ -n "$PG_CONF" ] && (grep -q "listen_addresses" "$PG_CONF" || echo "listen_addresses = '*'" | sudo tee -a "$PG_CONF")
 HBA=$(find /etc/postgresql -name pg_hba.conf 2>/dev/null | head -1)
 if [ -n "$HBA" ]; then
-  grep -q "$CLOUD_IP" "$HBA" || echo "host  labdb2  postgres  ${CLOUD_IP}/32  scram-sha-256" | sudo tee -a "$HBA"
+  grep -q "$CLOUD_IP" "$HBA" || echo "host  olab  postgres  ${CLOUD_IP}/32  scram-sha-256" | sudo tee -a "$HBA"
   sudo systemctl reload postgresql 2>/dev/null || sudo service postgresql reload 2>/dev/null || true
 fi
 command -v ufw &>/dev/null && sudo ufw allow from "$CLOUD_IP" to any port 5432

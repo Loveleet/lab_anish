@@ -1,0 +1,40 @@
+# Update api-config.json on gh-pages so the live site gets the current tunnel URL after cloud reboot.
+# Runs every 15 min and on manual trigger. Frontend loads this file at runtime so data shows without redeploy.
+name: Update API config (gh-pages)
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get tunnel URL from cloud
+        id: get_url
+        run: |
+          URL=$(curl -sf "http://150.241.244.130:10000/api/tunnel-url" 2>/dev/null | tr -d '\n' || echo "")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write api-config.json
+        env:
+          API_URL: ${{ steps.get_url.outputs.url }}
+        run: |
+          node -e "console.log(JSON.stringify({apiBaseUrl: process.env.API_URL || ''}))" > api-config.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add api-config.json
+          git diff --staged --quiet && echo "No change" || (git commit -m "chore: update api-config.json" && git push)
